@@ -65,20 +65,19 @@ export default function TiendaPage() {
         monedas: Math.max(0, a.monedas - item.price),
         [item.key]: (a[item.key] ?? 0) + 1,
       };
+      type Update = Database["public"]["Tables"]["alumnos"]["Update"];
+      const payload: Update = {
+        monedas: updated.monedas,
+        estrellas: updated.estrellas,
+        maxiestrellas: updated.maxiestrellas,
+        ultraestrellas: updated.ultraestrellas,
+        hongos: updated.hongos,
+        item_box: updated.item_box,
+        luna: updated.luna,
+      };
       const client = createSupabaseClient();
       if (!client) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (client.from("alumnos") as any)
-        .update({
-          monedas: updated.monedas,
-          estrellas: updated.estrellas,
-          maxiestrellas: updated.maxiestrellas,
-          ultraestrellas: updated.ultraestrellas,
-          hongos: updated.hongos,
-          item_box: updated.item_box,
-          luna: updated.luna,
-        })
-        .eq("id", selectedId);
+      await client.from("alumnos").update(payload).eq("id", selectedId);
       fetchAlumnos();
       try {
         const snd = new Audio("/coin_collect.mp3");

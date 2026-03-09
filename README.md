@@ -57,6 +57,8 @@ create policy "Allow all for anon" on public.alumnos
 
 (En producción conviene restringir la política según autenticación.)
 
+**Comprobar:** En Supabase → Table Editor debe aparecer la tabla `alumnos`. Si la app muestra "Cargando..." sin datos o errores al guardar, ejecuta la migración anterior en SQL Editor.
+
 ### 3. Instalación y ejecución
 
 ```bash

@@ -61,18 +61,17 @@ export default function HomePage() {
     async (alumno: Alumno) => {
       const client = createSupabaseClient();
       if (!client) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (client.from("alumnos") as any)
-        .update({
-          monedas: alumno.monedas,
-          estrellas: alumno.estrellas,
-          maxiestrellas: alumno.maxiestrellas,
-          ultraestrellas: alumno.ultraestrellas,
-          hongos: alumno.hongos,
-          item_box: alumno.item_box,
-          luna: alumno.luna,
-        })
-        .eq("id", alumno.id);
+      type Update = Database["public"]["Tables"]["alumnos"]["Update"];
+      const payload: Update = {
+        monedas: alumno.monedas,
+        estrellas: alumno.estrellas,
+        maxiestrellas: alumno.maxiestrellas,
+        ultraestrellas: alumno.ultraestrellas,
+        hongos: alumno.hongos,
+        item_box: alumno.item_box,
+        luna: alumno.luna,
+      };
+      await client.from("alumnos").update(payload).eq("id", alumno.id);
       fetchAlumnos();
     },
     [fetchAlumnos]
@@ -83,8 +82,8 @@ export default function HomePage() {
     if (!n) return;
     const client = createSupabaseClient();
     if (!client) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (client.from("alumnos") as any).insert({
+    type Insert = Database["public"]["Tables"]["alumnos"]["Insert"];
+    const payload: Insert = {
       nombre: n,
       monedas: 0,
       estrellas: 0,
@@ -93,7 +92,8 @@ export default function HomePage() {
       hongos: 0,
       item_box: 0,
       luna: 0,
-    });
+    };
+    await client.from("alumnos").insert(payload);
     setNombre("");
     fetchAlumnos();
   };
