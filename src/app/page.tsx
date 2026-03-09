@@ -32,7 +32,7 @@ export default function HomePage() {
       .select("*")
       .order("created_at", { ascending: true });
     if (error) {
-      console.error(error);
+      console.error("Supabase fetch error:", error.message, error.code, error.details);
       setAlumnos([]);
       return;
     }
