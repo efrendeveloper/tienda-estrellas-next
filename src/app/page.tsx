@@ -71,6 +71,7 @@ export default function HomePage() {
         item_box: alumno.item_box,
         luna: alumno.luna,
       };
+      // @ts-expect-error Supabase client table generic infers never in strict build
       await client.from("alumnos").update(payload).eq("id", alumno.id);
       fetchAlumnos();
     },
@@ -93,6 +94,7 @@ export default function HomePage() {
       item_box: 0,
       luna: 0,
     };
+    // @ts-expect-error Supabase client table generic infers never in strict build
     await client.from("alumnos").insert(payload);
     setNombre("");
     fetchAlumnos();

@@ -8,5 +8,5 @@ export type Supabase = SupabaseClient<Database>;
 
 export function createSupabaseClient(): Supabase | null {
   if (!supabaseUrl || !supabaseAnonKey) return null;
-  return createClient(supabaseUrl, supabaseAnonKey) as Supabase;
+  return createClient<Database>(supabaseUrl, supabaseAnonKey);
 }
