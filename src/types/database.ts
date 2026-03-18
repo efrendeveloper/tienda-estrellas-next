@@ -14,6 +14,7 @@ export interface Database {
           hongos: number;
           item_box: number;
           luna: number;
+          pow: number;
           created_at: string;
         };
         Insert: {
@@ -26,6 +27,7 @@ export interface Database {
           hongos?: number;
           item_box?: number;
           luna?: number;
+          pow?: number;
           created_at?: string;
         };
         Update: {
@@ -38,6 +40,7 @@ export interface Database {
           hongos?: number;
           item_box?: number;
           luna?: number;
+          pow?: number;
           created_at?: string;
         };
       };

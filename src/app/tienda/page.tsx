@@ -39,6 +39,7 @@ export default function TiendaPage() {
         hongos: r.hongos ?? 0,
         item_box: r.item_box ?? 0,
         luna: r.luna ?? 0,
+        pow: r.pow ?? 0,
         created_at: r.created_at,
       }))
     );
@@ -74,6 +75,7 @@ export default function TiendaPage() {
         hongos: updated.hongos,
         item_box: updated.item_box,
         luna: updated.luna,
+        pow: updated.pow,
       };
       const client = createSupabaseClient();
       if (!client) return;

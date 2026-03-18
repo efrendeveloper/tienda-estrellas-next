@@ -48,6 +48,7 @@ export default function HomePage() {
         hongos: r.hongos ?? 0,
         item_box: r.item_box ?? 0,
         luna: r.luna ?? 0,
+        pow: r.pow ?? 0,
         created_at: r.created_at,
       }))
     );
@@ -70,6 +71,7 @@ export default function HomePage() {
         hongos: alumno.hongos,
         item_box: alumno.item_box,
         luna: alumno.luna,
+        pow: alumno.pow,
       };
       // @ts-expect-error Supabase client table generic infers never in strict build
       await client.from("alumnos").update(payload).eq("id", alumno.id);
@@ -93,6 +95,7 @@ export default function HomePage() {
       hongos: 0,
       item_box: 0,
       luna: 0,
+      pow: 0,
     };
     // @ts-expect-error Supabase client table generic infers never in strict build
     await client.from("alumnos").insert(payload);
@@ -151,7 +154,9 @@ export default function HomePage() {
         alert("No tienes monedas o cajas suficientes para usar la ruleta.");
         return;
       }
-      const keys = ITEMS_FOR_DISPLAY.map((it) => it.key);
+      const keys = ITEMS_FOR_DISPLAY.filter(
+        (it) => it.key !== "pow" && it.key !== "monedas"
+      ).map((it) => it.key);
       const choice = keys[Math.floor(Math.random() * keys.length)];
       const updated = {
         ...a,

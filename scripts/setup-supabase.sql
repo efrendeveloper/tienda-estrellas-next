@@ -14,6 +14,7 @@ create table if not exists public.alumnos (
   hongos int not null default 0,
   item_box int not null default 0,
   luna int not null default 0,
+  pow int not null default 0,
   created_at timestamptz not null default now()
 );
 
