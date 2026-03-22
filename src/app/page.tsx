@@ -7,7 +7,6 @@ import type { Database } from "@/types/database";
 import type { Alumno } from "@/types";
 import { ITEMS_FOR_DISPLAY } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthMenu } from "@/components/AuthMenu";
 
 const IMAGE_PATH = "/image";
 const HOLD_TIME_MS = 3000;
@@ -356,18 +355,15 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="flex flex-wrap items-center gap-3 p-4 md:p-6">
+      <header className="flex flex-wrap items-center gap-3 px-4 pb-2 pt-2 md:px-6 md:pb-3 md:pt-3">
         <img
           src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="Efrendrums"
           className="h-14 md:h-16 rounded-lg object-cover"
         />
         <h1 className="text-sm md:text-base lg:text-lg flex-1 min-w-0">
-          Efrendrums — Gestión de Alumnos (v6.2)
+          Shop_estrellas(v6.2)
         </h1>
-        <div className="ml-auto w-full sm:w-auto flex justify-end">
-          <AuthMenu />
-        </div>
       </header>
 
       {!canEdit && (

@@ -7,7 +7,6 @@ import type { Database } from "@/types/database";
 import type { Alumno } from "@/types";
 import { SHOP_ITEMS } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthMenu } from "@/components/AuthMenu";
 
 const IMAGE_PATH = "/image";
 
@@ -129,7 +128,7 @@ export default function TiendaPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#ff003c] via-[#ff8c00] to-[#ffd700] text-white p-4 md:p-6">
-      <header className="flex flex-wrap items-center gap-3 mb-6">
+      <header className="flex flex-wrap items-center gap-3 mb-6 px-0 pt-1">
         <img
           src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="logo"
@@ -143,9 +142,6 @@ export default function TiendaPage() {
           >
             ← Volver
           </Link>
-        </div>
-        <div className="ml-auto w-full sm:w-auto flex justify-end">
-          <AuthMenu />
         </div>
       </header>
 
