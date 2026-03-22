@@ -10,6 +10,41 @@ import { ITEMS_FOR_DISPLAY } from "@/types";
 const IMAGE_PATH = "/image";
 const HOLD_TIME_MS = 3000;
 
+/** Orden visual como en el proyecto original (7 ítems en fila). */
+const ROULETTE_STRIP_KEYS = [
+  "estrellas",
+  "maxiestrellas",
+  "ultraestrellas",
+  "hongos",
+  "item_box",
+  "luna",
+  "monedas",
+] as const;
+
+type RouletteStripKey = (typeof ROULETTE_STRIP_KEYS)[number];
+
+const ROULETTE_PRIZE_LABEL: Partial<Record<RouletteStripKey, string>> = {
+  estrellas: "¡Estrella!",
+  maxiestrellas: "¡Maxi estrella!",
+  ultraestrellas: "¡Ultra estrella!",
+  hongos: "¡Hongo 1-UP!",
+  item_box: "¡Caja sorpresa!",
+  luna: "¡Luna!",
+  monedas: "¡Moneda!",
+};
+
+function stripItemFile(key: RouletteStripKey): string {
+  return (
+    ITEMS_FOR_DISPLAY.find((it) => it.key === key)?.file ?? "star.png"
+  );
+}
+/** Pasos del carrusel de la ruleta (más pasos = giro más largo). */
+const ROULETTE_SPIN_STEPS = 34;
+/** Retardo por paso: empieza rápido y se va frenando (estilo original). */
+function rouletteStepDelayMs(step: number): number {
+  return 48 + step * 11;
+}
+
 export default function HomePage() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +56,7 @@ export default function HomePage() {
     index: number;
     key: string;
   }>({ timerActive: false, startTime: 0, rafId: null, index: 0, key: "" });
+  const rollingRef = useRef(false);
 
   const supabase = createSupabaseClient();
 
@@ -103,6 +139,29 @@ export default function HomePage() {
     fetchAlumnos();
   };
 
+  const playCoin = useCallback(() => {
+    try {
+      const a = new Audio("/sound/coin_collect.mp3");
+      a.currentTime = 0;
+      a.volume = 0.9;
+      a.play().catch(() => {});
+    } catch {}
+  }, []);
+
+  const playCharge = useCallback((play: boolean) => {
+    try {
+      const a = new Audio("/sound/charge.mp3");
+      if (play) {
+        a.volume = 0.35;
+        a.loop = true;
+        a.play().catch(() => {});
+      } else {
+        a.pause();
+        a.currentTime = 0;
+      }
+    } catch {}
+  }, []);
+
   const changeCount = useCallback(
     async (index: number, key: keyof Alumno, delta: number) => {
       if (
@@ -122,42 +181,38 @@ export default function HomePage() {
       await saveAlumno(updated);
       playCoin();
     },
-    [alumnos, saveAlumno]
+    [alumnos, saveAlumno, playCoin]
   );
-
-  const playCoin = () => {
-    try {
-      const a = new Audio("/coin_collect.mp3");
-      a.currentTime = 0;
-      a.play().catch(() => {});
-    } catch {}
-  };
-
-  const playCharge = useCallback((play: boolean) => {
-    try {
-      const a = new Audio("/charge.mp3");
-      if (play) {
-        a.volume = 0.35;
-        a.loop = true;
-        a.play().catch(() => {});
-      } else {
-        a.pause();
-        a.currentTime = 0;
-      }
-    } catch {}
-  }, []);
 
   const openRoulette = useCallback(
     async (alumnoIndex: number) => {
+      if (rollingRef.current) return;
       const a = alumnos[alumnoIndex];
       if (a.monedas <= 0 || a.item_box <= 0) {
         alert("No tienes monedas o cajas suficientes para usar la ruleta.");
         return;
       }
+      rollingRef.current = true;
       const keys = ITEMS_FOR_DISPLAY.filter(
         (it) => it.key !== "pow" && it.key !== "monedas"
       ).map((it) => it.key);
       const choice = keys[Math.floor(Math.random() * keys.length)];
+      setRouletteWinner(null);
+      setRouletteOpen(true);
+      setRouletteHighlight(3);
+
+      for (let step = 0; step < ROULETTE_SPIN_STEPS; step += 1) {
+        setRouletteHighlight(Math.floor(Math.random() * ROULETTE_STRIP_KEYS.length));
+        playCoin();
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) =>
+          setTimeout(resolve, rouletteStepDelayMs(step))
+        );
+      }
+
+      const winIdx = ROULETTE_STRIP_KEYS.indexOf(choice as RouletteStripKey);
+      setRouletteHighlight(winIdx >= 0 ? winIdx : 0);
+      setRouletteWinner(choice);
       const updated = {
         ...a,
         monedas: Math.max(0, a.monedas - 1),
@@ -169,22 +224,25 @@ export default function HomePage() {
       setAlumnos(newList);
       await saveAlumno(updated);
       playCoin();
-      setRouletteWinner(choice);
-      setRouletteOpen(true);
       setTimeout(() => {
         setRouletteOpen(false);
         setRouletteWinner(null);
-      }, 2000);
+        setRouletteHighlight(null);
+        rollingRef.current = false;
+      }, 2200);
     },
-    [alumnos, saveAlumno]
+    [alumnos, saveAlumno, playCoin]
   );
 
   const [rouletteOpen, setRouletteOpen] = useState(false);
   const [rouletteWinner, setRouletteWinner] = useState<string | null>(null);
+  /** Índice 0–6 en la tira de 7 ítems; resaltado durante el giro y al parar. */
+  const [rouletteHighlight, setRouletteHighlight] = useState<number | null>(null);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
       if (key !== "item_box") return;
+      if (rollingRef.current) return;
       e.preventDefault();
       const state = holdState.current;
       if (state.timerActive) return;
@@ -255,7 +313,7 @@ export default function HomePage() {
     <>
       <header className="flex items-center gap-3 p-4 md:p-6">
         <img
-          src="/logo_efrendrums.jpeg"
+          src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="Efrendrums"
           className="h-14 md:h-16 rounded-lg object-cover"
         />
@@ -349,18 +407,51 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Roulette result modal */}
-      {rouletteOpen && rouletteWinner && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]">
-          <div className="bg-[#1e50c5] rounded-2xl p-8 flex flex-col items-center gap-4">
-            <p className="text-sm">¡Premio!</p>
-            <img
-              src={`${IMAGE_PATH}/${ITEMS_FOR_DISPLAY.find((i) => i.key === rouletteWinner)?.file ?? "star.png"}`}
-              alt=""
-              className="w-32 h-32 object-contain winner-glow rounded-xl"
-            />
-            <p className="text-xs uppercase">{rouletteWinner}</p>
+      {/* Ruleta sorpresa — layout como proyecto original */}
+      {rouletteOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col bg-[#070f1c]/88 backdrop-blur-md text-white"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ruleta sorpresa"
+        >
+          <h2 className="px-5 pt-5 md:px-8 md:pt-6 text-[10px] sm:text-xs md:text-sm leading-relaxed tracking-wide text-white drop-shadow-sm">
+            Ruleta sorpresa!
+          </h2>
+
+          <div className="flex flex-1 items-center justify-center px-3 py-6 md:px-6">
+            <div
+              className={`flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-5 lg:gap-6 max-w-5xl ${!rouletteWinner ? "ruleta-strip-spinning" : ""}`}
+            >
+              {ROULETTE_STRIP_KEYS.map((key, i) => {
+                const active =
+                  rouletteHighlight !== null && i === rouletteHighlight;
+                return (
+                  <div
+                    key={`${key}-${i}`}
+                    className={`flex items-center justify-center rounded-xl p-2 md:p-3 transition-all duration-150 ${
+                      active
+                        ? "scale-110 opacity-100"
+                        : "scale-100 opacity-45 md:opacity-50"
+                    }`}
+                  >
+                    <img
+                      src={`${IMAGE_PATH}/${stripItemFile(key)}`}
+                      alt=""
+                      className={`h-14 w-14 sm:h-16 sm:w-16 md:h-[4.5rem] md:w-[4.5rem] object-contain ${active ? "winner-glow" : ""}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          <p className="px-4 pb-6 md:pb-8 text-center text-[8px] sm:text-[10px] md:text-xs leading-relaxed text-white/95">
+            {rouletteWinner
+              ? ROULETTE_PRIZE_LABEL[rouletteWinner as RouletteStripKey] ??
+                "¡Premio!"
+              : "La ruleta se detendrá pronto..."}
+          </p>
         </div>
       )}
     </>

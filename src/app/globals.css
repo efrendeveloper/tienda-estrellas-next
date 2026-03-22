@@ -26,3 +26,17 @@ body {
 .winner-glow {
   animation: pulse-glow 900ms ease-in-out infinite;
 }
+
+@keyframes ruleta-drift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+}
+
+.ruleta-strip-spinning {
+  animation: ruleta-drift 0.32s ease-in-out infinite;
+}

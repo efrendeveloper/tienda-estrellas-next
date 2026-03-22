@@ -83,7 +83,7 @@ export default function TiendaPage() {
       await client.from("alumnos").update(payload).eq("id", selectedId);
       fetchAlumnos();
       try {
-        const snd = new Audio("/coin_collect.mp3");
+        const snd = new Audio("/sound/coin_collect.mp3");
         snd.currentTime = 0;
         snd.play().catch(() => {});
       } catch {}
@@ -114,7 +114,7 @@ export default function TiendaPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#ff003c] via-[#ff8c00] to-[#ffd700] text-white p-4 md:p-6">
       <header className="flex items-center gap-3 mb-6">
         <img
-          src="/logo_efrendrums.jpeg"
+          src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="logo"
           className="h-14 rounded-lg object-cover"
         />
