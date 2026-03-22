@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createSupabaseClient } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 import type { Alumno } from "@/types";
 import { SHOP_ITEMS } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { AuthMenu } from "@/components/AuthMenu";
 
 const IMAGE_PATH = "/image";
 
@@ -13,7 +15,9 @@ export default function TiendaPage() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string>("");
+  const coinAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  const { canEdit } = useAuth();
   const supabase = createSupabaseClient();
 
   const fetchAlumnos = useCallback(async () => {
@@ -51,6 +55,10 @@ export default function TiendaPage() {
 
   const comprar = useCallback(
     async (item: (typeof SHOP_ITEMS)[0]) => {
+      if (!canEdit) {
+        alert("Solo el profesor o un colaborador pueden comprar en la tienda.");
+        return;
+      }
       if (!selectedId) {
         alert("Selecciona un alumno");
         return;
@@ -83,13 +91,22 @@ export default function TiendaPage() {
       await client.from("alumnos").update(payload).eq("id", selectedId);
       fetchAlumnos();
       try {
-        const snd = new Audio("/sound/coin_collect.mp3");
-        snd.currentTime = 0;
-        snd.play().catch(() => {});
-      } catch {}
+        if (typeof window !== "undefined") {
+          if (!coinAudioRef.current) {
+            coinAudioRef.current = new Audio("/sound/coin_collect.mp3");
+            coinAudioRef.current.volume = 0.9;
+          }
+          const snd = coinAudioRef.current;
+          snd.pause();
+          snd.currentTime = 0;
+          void snd.play().catch(() => {});
+        }
+      } catch {
+        /* AbortError / autoplay */
+      }
       alert(`¡Compra realizada: ${item.title}!`);
     },
-    [selectedId, alumnos, supabase, fetchAlumnos]
+    [selectedId, alumnos, supabase, fetchAlumnos, canEdit]
   );
 
   if (!supabase) {
@@ -112,13 +129,13 @@ export default function TiendaPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#ff003c] via-[#ff8c00] to-[#ffd700] text-white p-4 md:p-6">
-      <header className="flex items-center gap-3 mb-6">
+      <header className="flex flex-wrap items-center gap-3 mb-6">
         <img
           src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="logo"
           className="h-14 rounded-lg object-cover"
         />
-        <div className="flex-1 flex flex-wrap items-center gap-3">
+        <div className="flex-1 flex flex-wrap items-center gap-3 min-w-0">
           <h1 className="text-sm md:text-base">Shop Items - Efrendrums (v6.2)</h1>
           <Link
             href="/"
@@ -127,7 +144,17 @@ export default function TiendaPage() {
             ← Volver
           </Link>
         </div>
+        <div className="ml-auto w-full sm:w-auto flex justify-end">
+          <AuthMenu />
+        </div>
       </header>
+
+      {!canEdit && (
+        <div className="mb-4 mx-auto max-w-4xl rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-2 text-[9px] sm:text-[10px] text-amber-100 leading-relaxed text-center">
+          <strong className="text-amber-50">Solo lectura.</strong> Puedes ver precios y elegir un alumno;
+          la compra está desactivada. Inicia sesión como profesor o colaborador para comprar.
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto text-center">
         <div className="mb-4">
@@ -166,7 +193,8 @@ export default function TiendaPage() {
               <button
                 type="button"
                 onClick={() => comprar(it)}
-                className="mt-1 px-3 py-2 rounded-lg bg-white text-black font-bold cursor-pointer text-xs hover:opacity-90"
+                disabled={!canEdit}
+                className="mt-1 px-3 py-2 rounded-lg bg-white text-black font-bold cursor-pointer text-xs hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Comprar
               </button>

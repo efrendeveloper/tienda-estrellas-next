@@ -1,0 +1,187 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { Session, User } from "@supabase/supabase-js";
+import { createSupabaseClient } from "@/lib/supabase";
+import type { Database } from "@/types/database";
+
+type ProfileRoleRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "role">;
+
+export type AppRole = "admin" | "collaborator" | "viewer";
+
+export type AuthContextValue = {
+  user: User | null;
+  session: Session | null;
+  role: AppRole | null;
+  /** Profesor (admin) o colaborador: pueden editar alumnos y comprar en la tienda. */
+  canEdit: boolean;
+  /** Solo administrador: eliminar alumnos (RLS también lo exige). */
+  isAdmin: boolean;
+  /** Cargando sesión / perfil inicial */
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function normalizeRole(raw: string | null | undefined): AppRole {
+  if (raw === "admin" || raw === "collaborator" || raw === "viewer") return raw;
+  return "viewer";
+}
+
+function isAbortLike(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (
+    err &&
+    typeof err === "object" &&
+    "name" in err &&
+    (err as { name: string }).name === "AbortError"
+  )
+    return true;
+  return false;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
+  const [loading, setLoading] = useState(true);
+  /** Evita setState tras desmontar (Strict Mode / navegación) — reduce AbortError en cadena con fetch. */
+  const mountedRef = useRef(true);
+
+  const supabase = createSupabaseClient();
+
+  const fetchRole = useCallback(
+    async (uid: string): Promise<AppRole> => {
+      if (!supabase) return "viewer";
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        if (error || !data) return "viewer";
+        const row = data as ProfileRoleRow;
+        return normalizeRole(row.role);
+      } catch (e) {
+        if (!isAbortLike(e)) console.warn("fetchRole:", e);
+        return "viewer";
+      }
+    },
+    [supabase]
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (!supabase) {
+      setLoading(false);
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    void (async () => {
+      let s: Session | null = null;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error && !isAbortLike(error)) {
+          console.warn("getSession:", error.message);
+        }
+        s = data.session;
+      } catch (e) {
+        if (!isAbortLike(e)) console.warn("getSession error:", e);
+        if (!mountedRef.current) return;
+        setLoading(false);
+        return;
+      }
+      if (!mountedRef.current) return;
+      setSession(s);
+      setUser(s?.user ?? null);
+      if (s?.user) {
+        const r = await fetchRole(s.user.id);
+        if (!mountedRef.current) return;
+        setRole(r);
+      } else {
+        setRole(null);
+      }
+      if (mountedRef.current) setLoading(false);
+    })();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (!mountedRef.current) return;
+      setSession(s);
+      setUser(s?.user ?? null);
+      void (async () => {
+        if (!mountedRef.current) return;
+        if (s?.user) {
+          const r = await fetchRole(s.user.id);
+          if (!mountedRef.current) return;
+          setRole(r);
+        } else {
+          setRole(null);
+        }
+      })();
+    });
+
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase, fetchRole]);
+
+  const canEdit = role === "admin" || role === "collaborator";
+  const isAdmin = role === "admin";
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) return { error: "Supabase no configurado" };
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      return { error: error?.message ?? null };
+    },
+    [supabase]
+  );
+
+  const signOut = useCallback(async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  }, [supabase]);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      session,
+      role,
+      canEdit,
+      isAdmin,
+      loading,
+      signIn,
+      signOut,
+    }),
+    [user, session, role, canEdit, isAdmin, loading, signIn, signOut]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth debe usarse dentro de AuthProvider");
+  }
+  return ctx;
+}

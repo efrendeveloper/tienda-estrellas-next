@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Press_Start_2P } from "next/font/google";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const pressStart = Press_Start_2P({
@@ -27,7 +28,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-press antialiased" style={{ fontFamily: "'Press Start 2P', cursive" }}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

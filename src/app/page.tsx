@@ -6,6 +6,8 @@ import { createSupabaseClient } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 import type { Alumno } from "@/types";
 import { ITEMS_FOR_DISPLAY } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { AuthMenu } from "@/components/AuthMenu";
 
 const IMAGE_PATH = "/image";
 const HOLD_TIME_MS = 3000;
@@ -57,7 +59,11 @@ export default function HomePage() {
     key: string;
   }>({ timerActive: false, startTime: 0, rafId: null, index: 0, key: "" });
   const rollingRef = useRef(false);
+  /** Una sola instancia evita AbortError por play() encadenados y permite parar charge de verdad. */
+  const coinAudioRef = useRef<HTMLAudioElement | null>(null);
+  const chargeAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  const { canEdit, isAdmin } = useAuth();
   const supabase = createSupabaseClient();
 
   const fetchAlumnos = useCallback(async () => {
@@ -117,6 +123,7 @@ export default function HomePage() {
   );
 
   const addAlumno = async () => {
+    if (!canEdit) return;
     const n = nombre.trim();
     if (!n) return;
     const client = createSupabaseClient();
@@ -139,31 +146,67 @@ export default function HomePage() {
     fetchAlumnos();
   };
 
+  const removeAlumno = useCallback(
+    async (alumno: Alumno) => {
+      if (!isAdmin) return;
+      if (
+        !window.confirm(
+          `¿Eliminar a "${alumno.nombre}"? Se borrarán todos sus ítems. No se puede deshacer.`
+        )
+      ) {
+        return;
+      }
+      const client = createSupabaseClient();
+      if (!client) return;
+      const { error } = await client.from("alumnos").delete().eq("id", alumno.id);
+      if (error) {
+        alert(error.message || "No se pudo eliminar (¿sesión o permisos?)");
+        return;
+      }
+      fetchAlumnos();
+    },
+    [fetchAlumnos, isAdmin]
+  );
+
   const playCoin = useCallback(() => {
     try {
-      const a = new Audio("/sound/coin_collect.mp3");
+      if (typeof window === "undefined") return;
+      if (!coinAudioRef.current) {
+        coinAudioRef.current = new Audio("/sound/coin_collect.mp3");
+        coinAudioRef.current.volume = 0.9;
+      }
+      const a = coinAudioRef.current;
+      a.pause();
       a.currentTime = 0;
-      a.volume = 0.9;
-      a.play().catch(() => {});
-    } catch {}
+      void a.play().catch(() => {});
+    } catch {
+      /* ignorar AbortError / autoplay bloqueado */
+    }
   }, []);
 
   const playCharge = useCallback((play: boolean) => {
     try {
-      const a = new Audio("/sound/charge.mp3");
+      if (typeof window === "undefined") return;
+      if (!chargeAudioRef.current) {
+        chargeAudioRef.current = new Audio("/sound/charge.mp3");
+      }
+      const a = chargeAudioRef.current;
       if (play) {
         a.volume = 0.35;
         a.loop = true;
-        a.play().catch(() => {});
+        void a.play().catch(() => {});
       } else {
         a.pause();
         a.currentTime = 0;
       }
-    } catch {}
+    } catch {
+      /* ignorar */
+    }
   }, []);
 
   const changeCount = useCallback(
     async (index: number, key: keyof Alumno, delta: number) => {
+      if (!canEdit) return;
       if (
         key === "id" ||
         key === "nombre" ||
@@ -181,11 +224,12 @@ export default function HomePage() {
       await saveAlumno(updated);
       playCoin();
     },
-    [alumnos, saveAlumno, playCoin]
+    [alumnos, saveAlumno, playCoin, canEdit]
   );
 
   const openRoulette = useCallback(
     async (alumnoIndex: number) => {
+      if (!canEdit) return;
       if (rollingRef.current) return;
       const a = alumnos[alumnoIndex];
       if (a.monedas <= 0 || a.item_box <= 0) {
@@ -231,7 +275,7 @@ export default function HomePage() {
         rollingRef.current = false;
       }, 2200);
     },
-    [alumnos, saveAlumno, playCoin]
+    [alumnos, saveAlumno, playCoin, canEdit]
   );
 
   const [rouletteOpen, setRouletteOpen] = useState(false);
@@ -241,6 +285,7 @@ export default function HomePage() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
+      if (!canEdit) return;
       if (key !== "item_box") return;
       if (rollingRef.current) return;
       e.preventDefault();
@@ -274,7 +319,7 @@ export default function HomePage() {
       }
       state.rafId = requestAnimationFrame(step);
     },
-    [openRoulette, playCharge]
+    [openRoulette, playCharge, canEdit]
   );
 
   const handlePointerUp = useCallback(() => {
@@ -311,16 +356,27 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="flex items-center gap-3 p-4 md:p-6">
+      <header className="flex flex-wrap items-center gap-3 p-4 md:p-6">
         <img
           src={`${IMAGE_PATH}/logo_efrendrums.png`}
           alt="Efrendrums"
           className="h-14 md:h-16 rounded-lg object-cover"
         />
-        <h1 className="text-sm md:text-base lg:text-lg">
+        <h1 className="text-sm md:text-base lg:text-lg flex-1 min-w-0">
           Efrendrums — Gestión de Alumnos (v6.2)
         </h1>
+        <div className="ml-auto w-full sm:w-auto flex justify-end">
+          <AuthMenu />
+        </div>
       </header>
+
+      {!canEdit && (
+        <div className="mx-4 md:mx-6 -mt-2 mb-2 rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-2 text-[9px] sm:text-[10px] text-amber-100 leading-relaxed">
+          <strong className="text-amber-50">Solo lectura.</strong> Los padres y visitantes pueden ver
+          logros; para agregar alumnos, editar ítems o usar la ruleta, inicia sesión como{" "}
+          <strong>administrador</strong> o <strong>colaborador</strong>.
+        </div>
+      )}
 
       <main className="max-w-4xl mx-auto p-4 md:p-6">
         <div className="flex flex-wrap gap-2 items-center mb-4">
@@ -328,14 +384,16 @@ export default function HomePage() {
             type="text"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addAlumno()}
+            onKeyDown={(e) => e.key === "Enter" && canEdit && addAlumno()}
             placeholder="Nombre del alumno"
-            className="px-3 py-2 rounded-lg border-0 bg-white/10 text-white placeholder-white/60 w-64 text-sm"
+            disabled={!canEdit}
+            className="px-3 py-2 rounded-lg border-0 bg-white/10 text-white placeholder-white/60 w-64 text-sm disabled:opacity-45 disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={addAlumno}
-            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff4747] to-[#ff9f00] text-white cursor-pointer text-sm hover:opacity-90"
+            disabled={!canEdit}
+            className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#ff4747] to-[#ff9f00] text-white cursor-pointer text-sm hover:opacity-90 disabled:opacity-45 disabled:cursor-not-allowed"
           >
             Agregar alumno
           </button>
@@ -353,20 +411,45 @@ export default function HomePage() {
               key={a.id}
               className="bg-white/5 rounded-xl p-4 border border-white/10"
             >
-              <div className="text-sm mb-2">{a.nombre}</div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div className="text-sm">{a.nombre}</div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => void removeAlumno(a)}
+                    aria-label={`Eliminar a ${a.nombre}`}
+                    title="Eliminar alumno"
+                    className="shrink-0 rounded-md border border-red-400/50 bg-black p-1.5 hover:border-red-300 hover:bg-red-950/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+                  >
+                    <img
+                      src={`${IMAGE_PATH}/trash-delete.png`}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="h-5 w-5 object-contain pointer-events-none"
+                    />
+                  </button>
+                )}
+              </div>
               <div className="flex flex-wrap gap-3">
                 {ITEMS_FOR_DISPLAY.map((it) => (
                   <div
                     key={it.key}
-                    className="item-box relative w-24 bg-[#1e50c5] rounded-xl p-2 text-center cursor-pointer overflow-visible transition-transform hover:scale-105"
+                    className={`item-box relative w-24 bg-[#1e50c5] rounded-xl p-2 text-center overflow-visible transition-transform ${
+                      canEdit
+                        ? "cursor-pointer hover:scale-105"
+                        : "cursor-default opacity-95"
+                    }`}
                     data-key={it.key}
                     data-index={i}
                     onClick={(e) => {
+                      if (!canEdit) return;
                       if (it.key !== "item_box")
                         changeCount(i, it.key as keyof Alumno, 1);
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
+                      if (!canEdit) return false;
                       if (it.key !== "item_box")
                         changeCount(i, it.key as keyof Alumno, -1);
                       return false;
@@ -402,7 +485,9 @@ export default function HomePage() {
 
         {alumnos.length === 0 && (
           <p className="text-sm text-white/70 mt-6">
-            No hay alumnos. Añade uno arriba.
+            {canEdit
+              ? "No hay alumnos. Añade uno arriba."
+              : "No hay alumnos registrados."}
           </p>
         )}
       </main>

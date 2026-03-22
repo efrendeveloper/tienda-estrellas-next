@@ -3,6 +3,26 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string | null;
+          role: "admin" | "collaborator" | "viewer";
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email?: string | null;
+          role?: "admin" | "collaborator" | "viewer";
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string | null;
+          role?: "admin" | "collaborator" | "viewer";
+          updated_at?: string;
+        };
+      };
       alumnos: {
         Row: {
           id: string;
