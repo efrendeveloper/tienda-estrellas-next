@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthMenu } from "@/components/AuthMenu";
+import { useAuth } from "@/contexts/AuthContext";
 
 const NAV = [
   { href: "/", label: "Inicio" },
@@ -13,6 +14,16 @@ const NAV = [
 
 export function AppTopBar() {
   const pathname = usePathname();
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) {
+    return (
+      <div className="fixed right-2 top-2 z-[5000] sm:right-4 sm:top-3">
+        <AuthMenu />
+      </div>
+    );
+  }
 
   return (
     <header
@@ -43,7 +54,12 @@ export function AppTopBar() {
           );
         })}
       </nav>
-      <div className="flex shrink-0 items-center border-l border-white/15 pl-2 sm:pl-3">
+      <div className="flex shrink-0 items-center gap-2 border-l border-white/15 pl-2 sm:gap-3 sm:pl-3">
+        <img
+          src="/image/logo_efrendrums.png"
+          alt="Efrendrums"
+          className="h-7 w-auto rounded-md object-cover sm:h-8"
+        />
         <AuthMenu />
       </div>
     </header>
