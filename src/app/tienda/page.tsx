@@ -137,7 +137,7 @@ export default function TiendaPage() {
         <div className="flex-1 flex flex-wrap items-center gap-3 min-w-0">
           <h1 className="text-sm md:text-base">Shop Items - Efrendrums (v6.2)</h1>
           <Link
-            href="/"
+            href="/shop_estrellas"
             className="text-xs px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30"
           >
             ← Volver

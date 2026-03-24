@@ -28,6 +28,10 @@ export type AuthContextValue = {
   /** Cargando sesión / perfil inicial */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -161,6 +165,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, [supabase]);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (!supabase) return { error: "Supabase no configurado" };
+      if (!user?.email) return { error: "Sesión inválida" };
+      if (newPassword.length < 6) return { error: "La nueva contraseña debe tener al menos 6 caracteres" };
+
+      try {
+        // Primero intenta con la sesión activa.
+        // Esto evita fallos por "Invalid login credentials" si la re-autenticación no coincide.
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: newPassword,
+        });
+
+        if (!updateError) return { error: null };
+
+        // Fallback: si falla, y el usuario ingresó contraseña actual, re-autenticamos y reintentamos.
+        if (!currentPassword.trim()) {
+          return { error: updateError.message ?? "No se pudo cambiar la contraseña" };
+        }
+
+        const { error: reauthError } = await supabase.auth.signInWithPassword({
+          email: user.email.trim(),
+          password: currentPassword,
+        });
+        if (reauthError) {
+          return {
+            error: reauthError.message ?? "No se pudo validar la contraseña actual",
+          };
+        }
+
+        const { error: updateError2 } = await supabase.auth.updateUser({
+          password: newPassword,
+        });
+
+        return { error: updateError2?.message ?? null };
+      } catch (e: unknown) {
+        if (!isAbortLike(e)) console.warn("changePassword:", e);
+        return { error: "No se pudo cambiar la contraseña" };
+      }
+    },
+    [supabase, user]
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -170,9 +217,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       loading,
       signIn,
+      changePassword,
       signOut,
     }),
-    [user, session, role, canEdit, isAdmin, loading, signIn, signOut]
+    [user, session, role, canEdit, isAdmin, loading, signIn, changePassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
