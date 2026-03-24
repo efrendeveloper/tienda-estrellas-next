@@ -56,6 +56,7 @@ export default function ShopEstrellasPage() {
   const rollingRef = useRef(false);
   const coinAudioRef = useRef<HTMLAudioElement | null>(null);
   const chargeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const powStartAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const { canEdit, isAdmin } = useAuth();
   const supabase = createSupabaseClient();
@@ -202,6 +203,22 @@ export default function ShopEstrellasPage() {
     }
   }, []);
 
+  const playPowStart = useCallback(() => {
+    try {
+      if (typeof window === "undefined") return;
+      if (!powStartAudioRef.current) {
+        powStartAudioRef.current = new Audio("/sound/pow_game_start.mp3");
+        powStartAudioRef.current.volume = 0.9;
+      }
+      const a = powStartAudioRef.current;
+      a.pause();
+      a.currentTime = 0;
+      void a.play().catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const changeCount = useCallback(
     async (index: number, key: keyof Alumno, delta: number) => {
       if (!canEdit) return;
@@ -301,8 +318,9 @@ export default function ShopEstrellasPage() {
       }
 
       setPowGameOpen(true);
+      playPowStart();
     },
-    [canEdit, powGameRunning, alumnos, saveAlumno, rouletteOpen, fetchAlumnos]
+    [canEdit, powGameRunning, alumnos, saveAlumno, rouletteOpen, fetchAlumnos, playPowStart]
   );
 
   const finishPowGame = useCallback(
