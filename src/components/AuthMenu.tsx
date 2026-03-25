@@ -6,8 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function AuthMenu() {
   const router = useRouter();
-  const { user, role, canEdit, loading, signIn, changePassword, signOut } = useAuth();
+  const { user, role, loading, signIn, changePassword, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export function AuthMenu() {
     await signOut();
     setBusy(false);
     setOpen(false);
+    setUserMenuOpen(false);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -77,40 +79,51 @@ export function AuthMenu() {
       {loading ? (
         <span className="text-white/60 whitespace-nowrap">…</span>
       ) : user ? (
-        <>
-          <span className="hidden sm:inline text-white/80 max-w-[140px] truncate" title={user.email ?? ""}>
-            {user.email}
-          </span>
-          {roleLabel && (
-            <span
-              className={`rounded px-2 py-1 whitespace-nowrap ${
-                canEdit ? "bg-emerald-600/90 text-white" : "bg-white/15 text-white/90"
-              }`}
-            >
-              {roleLabel}
-            </span>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-[#1a1a1a] text-white hover:bg-white/10"
+            aria-label="Abrir menú de usuario"
+            aria-expanded={userMenuOpen}
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Z" />
+              <path d="M19.4 13.2c.04-.39.06-.79.06-1.2s-.02-.81-.06-1.2l2.1-1.64-2-3.46-2.5 1a7.82 7.82 0 0 0-2.06-1.2l-.38-2.62h-4l-.38 2.62c-.73.26-1.41.66-2.06 1.2l-2.5-1-2 3.46 2.1 1.64c-.04.39-.06.79-.06 1.2s.02.81.06 1.2l-2.1 1.64 2 3.46 2.5-1c.65.54 1.33.94 2.06 1.2l.38 2.62h4l.38-2.62c.73-.26 1.41-.66 2.06-1.2l2.5 1 2-3.46-2.1-1.64Z" />
+            </svg>
+          </button>
+
+          {userMenuOpen && (
+            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/15 bg-[#1a1a1a] p-2 shadow-2xl">
+              <div className="mb-2 rounded-lg bg-white/5 px-3 py-2">
+                <p className="truncate text-[10px] text-white/90" title={user.email ?? ""}>
+                  {user.email}
+                </p>
+                {roleLabel && <p className="mt-1 text-[10px] text-red-300">{roleLabel}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPwdOpen(true);
+                  setPwdError(null);
+                  setUserMenuOpen(false);
+                }}
+                disabled={busy}
+                className="mb-1 w-full rounded-md bg-white/10 px-3 py-2 text-left text-[10px] text-white hover:bg-white/20 disabled:opacity-50"
+              >
+                Cambiar contraseña
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                disabled={busy}
+                className="w-full rounded-md bg-[#ff0000] px-3 py-2 text-left text-[10px] text-white hover:bg-[#d10000] disabled:opacity-50"
+              >
+                Cerrar sesión
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            onClick={() => void handleSignOut()}
-            disabled={busy}
-            className="rounded-lg bg-[#ff0000]/85 px-3 py-1.5 text-white hover:bg-[#ff0000] disabled:opacity-50 whitespace-nowrap"
-          >
-            Cerrar sesión
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPwdOpen(true);
-              setPwdError(null);
-            }}
-            disabled={busy}
-            className="rounded-lg bg-white/15 px-3 py-1.5 text-white hover:bg-white/25 disabled:opacity-50 whitespace-nowrap"
-            title="Cambiar contraseña"
-          >
-            Cambiar contraseña
-          </button>
-        </>
+        </div>
       ) : (
         <button
           type="button"

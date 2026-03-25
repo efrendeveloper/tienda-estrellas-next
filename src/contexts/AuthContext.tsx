@@ -54,6 +54,15 @@ function isAbortLike(err: unknown): boolean {
   return false;
 }
 
+function isInvalidRefreshTokenError(message: string | undefined): boolean {
+  if (!message) return false;
+  const text = message.toLowerCase();
+  return (
+    text.includes("invalid refresh token") ||
+    text.includes("refresh token not found")
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -98,7 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let s: Session | null = null;
       try {
         const { data, error } = await supabase.auth.getSession();
-        if (error && !isAbortLike(error)) {
+        if (error && isInvalidRefreshTokenError(error.message)) {
+          // Token local huérfano/expirado: limpiamos sesión local sin ruido en consola.
+          await supabase.auth.signOut({ scope: "local" });
+        } else if (error && !isAbortLike(error)) {
           console.warn("getSession:", error.message);
         }
         s = data.session;
@@ -162,7 +174,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Si el refresh token ya no existe en el servidor, limpiamos localmente.
+      if (
+        e &&
+        typeof e === "object" &&
+        "message" in e &&
+        isInvalidRefreshTokenError(String((e as { message?: string }).message))
+      ) {
+        await supabase.auth.signOut({ scope: "local" });
+        return;
+      }
+      throw e;
+    }
   }, [supabase]);
 
   const changePassword = useCallback(

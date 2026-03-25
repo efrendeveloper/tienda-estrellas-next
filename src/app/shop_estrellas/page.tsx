@@ -219,6 +219,17 @@ export default function ShopEstrellasPage() {
     }
   }, []);
 
+  const stopPowStart = useCallback(() => {
+    try {
+      const a = powStartAudioRef.current;
+      if (!a) return;
+      a.pause();
+      a.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const changeCount = useCallback(
     async (index: number, key: keyof Alumno, delta: number) => {
       if (!canEdit) return;
@@ -335,12 +346,13 @@ export default function ShopEstrellasPage() {
       } catch {
         alert("Se jugaron monedas pero no se pudieron actualizar. Recarga la página.");
       } finally {
+        stopPowStart();
         setPowGameOpen(false);
         setPowGameRunning(false);
         setPowGameAlumnoId(null);
       }
     },
-    [powGameAlumnoId, alumnos, saveAlumno]
+    [powGameAlumnoId, alumnos, saveAlumno, stopPowStart]
   );
 
   const handlePointerDown = useCallback(
@@ -594,6 +606,7 @@ export default function ShopEstrellasPage() {
           coinImageSrc={`${IMAGE_PATH}/coin.png`}
           onCoinCollected={playCoin}
           onRequestClose={() => {
+            stopPowStart();
             setPowGameOpen(false);
             setPowGameRunning(false);
             setPowGameAlumnoId(null);
