@@ -75,7 +75,7 @@ export function AuthMenu() {
           : null;
 
   return (
-    <div className="relative flex items-center gap-2 text-[10px] sm:text-xs">
+    <div className="relative flex items-center gap-2 text-[10px] sm:text-xs font-sans">
       {loading ? (
         <span className="text-white/60 whitespace-nowrap">…</span>
       ) : user ? (
@@ -139,7 +139,7 @@ export function AuthMenu() {
 
       {open && (
         <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-[10000] grid min-h-dvh place-items-center bg-black/60 p-4 backdrop-blur-lg"
           role="dialog"
           aria-modal="true"
           aria-labelledby="auth-title"
@@ -148,7 +148,7 @@ export function AuthMenu() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/20 bg-[#1a1a1a] p-5 sm:p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-white/20 bg-[#1a1a1a] p-5 sm:p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="auth-title" className="mb-4 text-xs text-white">
@@ -209,7 +209,7 @@ export function AuthMenu() {
 
       {pwdOpen && (
         <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/65 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-[10000] grid min-h-dvh place-items-center bg-black/60 p-4 backdrop-blur-lg"
           role="dialog"
           aria-modal="true"
           aria-labelledby="pwd-title"
@@ -218,7 +218,7 @@ export function AuthMenu() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/20 bg-[#1a1a1a] p-5 sm:p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-white/20 bg-[#1a1a1a] p-5 sm:p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="pwd-title" className="mb-4 text-xs text-white">

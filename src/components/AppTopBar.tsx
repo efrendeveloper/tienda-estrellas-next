@@ -31,7 +31,7 @@ export function AppTopBar() {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-[5000] flex h-12 sm:h-14 items-stretch justify-between gap-2 sm:gap-4 border-b border-white/10 bg-[#1a1a1a]/95 px-2 sm:px-4 backdrop-blur"
+      className="fixed top-0 left-0 right-0 z-[5000] flex h-12 sm:h-14 items-stretch justify-between gap-2 sm:gap-4 border-b border-white/10 bg-[#1a1a1a]/95 px-2 sm:px-4 font-sans backdrop-blur"
     >
       <nav
         className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 md:flex [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
