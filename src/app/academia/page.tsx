@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AuthMenu } from "@/components/AuthMenu";
 
 const WHY_CHOOSE_US = [
   {
@@ -64,14 +65,17 @@ export default function AcademiaLandingPage() {
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white font-sans">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#1a1a1a]/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 md:px-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
             <img
               src="/image/logo_efrendrums.png"
               alt="Efrendrums"
               className="h-10 w-10 rounded-md object-cover"
             />
-            <p className="text-sm font-semibold tracking-wide">Academia de Bateria</p>
+            <p className="text-xs sm:text-sm font-semibold tracking-wide">Academia de Bateria</p>
+          </div>
+          <div className="md:hidden">
+            <AuthMenu />
           </div>
           <nav className="hidden items-center gap-2 md:flex">
             <a href="#porque" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
@@ -86,12 +90,7 @@ export default function AcademiaLandingPage() {
             <a href="#clase-prueba" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
               Clase de prueba
             </a>
-            <Link
-              href="/shop_estrellas"
-              className="rounded-md bg-[#ff0000] px-3 py-2 text-xs text-white hover:bg-[#d10000]"
-            >
-              Iniciar sesion
-            </Link>
+            <AuthMenu />
           </nav>
         </div>
       </header>

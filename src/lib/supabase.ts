@@ -22,6 +22,9 @@ export function createSupabaseClient(): Supabase | null {
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
+          // Evita reutilizar tokens viejos de otras ejecuciones/apps y reduce
+          // errores "Invalid Refresh Token: Refresh Token Not Found".
+          storageKey: "tienda-estrellas-auth",
         },
       });
     }
