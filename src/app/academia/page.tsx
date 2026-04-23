@@ -61,6 +61,21 @@ const TESTIMONIALS = [
   },
 ];
 
+const POPULAR_VIDEOS = [
+  {
+    id: "W_o0_IfGNLc",
+    title: "Tutorial 1 Bueno es Alabar",
+  },
+  {
+    id: "wam0iMIYRQ8",
+    title: "tutorial 3 Alabadle",
+  },
+  {
+    id: "CzuoEwybec8",
+    title: "Drumcover de Hashem Reina de Marcos Witt",
+  },
+];
+
 export default function AcademiaLandingPage() {
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white font-sans">
@@ -86,6 +101,9 @@ export default function AcademiaLandingPage() {
             </a>
             <a href="#testimonios" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
               Testimonios
+            </a>
+            <a href="#videos" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
+              Videos tutoriales
             </a>
             <a href="#clase-prueba" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
               Clase de prueba
@@ -154,6 +172,45 @@ export default function AcademiaLandingPage() {
                 <h3 className="mt-4 text-base font-semibold">{teacher.name}</h3>
                 <p className="mt-1 text-xs text-red-400">{teacher.role}</p>
                 <p className="mt-2 text-sm leading-relaxed text-white/75">{teacher.bio}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="videos" className="bg-[#202020]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold md:text-3xl">Videos tutoriales</h2>
+              <p className="mt-2 text-sm text-white/75">
+                Seleccion de los 3 videos mas populares del canal.
+              </p>
+            </div>
+            <Link
+              href="https://www.youtube.com/@efrendrums182"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-white/25 px-4 py-2 text-xs text-white hover:bg-white/10"
+            >
+              Ver canal completo
+            </Link>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {POPULAR_VIDEOS.map((video) => (
+              <article key={video.id} className="rounded-xl border border-white/10 bg-[#1a1a1a] p-3">
+                <div className="aspect-video w-full overflow-hidden rounded-lg">
+                  <iframe
+                    className="h-full w-full"
+                    src={`https://www.youtube.com/embed/${video.id}`}
+                    title={video.title}
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+                <p className="mt-3 text-sm text-white/90">{video.title}</p>
               </article>
             ))}
           </div>

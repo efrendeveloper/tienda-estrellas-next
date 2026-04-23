@@ -52,7 +52,8 @@ export default function ShopEstrellasPage() {
     rafId: number | null;
     index: number;
     key: string;
-  }>({ timerActive: false, startTime: 0, rafId: null, index: 0, key: "" });
+    action: "roulette" | "pow" | null;
+  }>({ timerActive: false, startTime: 0, rafId: null, index: 0, key: "", action: null });
   const rollingRef = useRef(false);
   const coinAudioRef = useRef<HTMLAudioElement | null>(null);
   const chargeAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -357,14 +358,17 @@ export default function ShopEstrellasPage() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
-      if (!canEdit || powGameRunning || key !== "item_box" || rollingRef.current) return;
-      e.preventDefault();
+      const wantsRoulette = key === "item_box" && e.button === 0;
+      const wantsPow = key === "pow" && e.button === 2;
+      if (!canEdit || powGameRunning || rollingRef.current || (!wantsRoulette && !wantsPow)) return;
+      if (wantsPow) e.preventDefault();
       const state = holdState.current;
       if (state.timerActive) return;
       state.timerActive = true;
       state.startTime = performance.now();
       state.index = index;
       state.key = key;
+      state.action = wantsPow ? "pow" : "roulette";
       playCharge(true);
       const ringEl = (e.target as HTMLElement).closest(".item-box")?.querySelector(".ring");
       if (ringEl) ringEl.classList.remove("hidden");
@@ -385,14 +389,16 @@ export default function ShopEstrellasPage() {
           state.timerActive = false;
           playCharge(false);
           if (ringEl) ringEl.classList.add("hidden");
-          openRoulette(state.index);
+          if (state.action === "pow") void startPowGame(state.index);
+          else void openRoulette(state.index);
+          state.action = null;
           return;
         }
         state.rafId = requestAnimationFrame(step);
       }
       state.rafId = requestAnimationFrame(step);
     },
-    [openRoulette, playCharge, canEdit, powGameRunning]
+    [openRoulette, playCharge, canEdit, powGameRunning, startPowGame]
   );
 
   const handlePointerUp = useCallback(() => {
@@ -401,6 +407,7 @@ export default function ShopEstrellasPage() {
     state.timerActive = false;
     if (state.rafId) cancelAnimationFrame(state.rafId);
     state.rafId = null;
+    state.action = null;
     playCharge(false);
     document.querySelectorAll(".ring").forEach((el) => el.classList.add("hidden"));
   }, [playCharge]);
@@ -512,11 +519,9 @@ export default function ShopEstrellasPage() {
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (!canEdit || powGameRunning) return false;
-                      if (it.key === "pow") {
-                        void startPowGame(i);
-                        return false;
+                      if (it.key !== "item_box" && it.key !== "pow") {
+                        changeCount(i, it.key as keyof Alumno, -1);
                       }
-                      if (it.key !== "item_box") changeCount(i, it.key as keyof Alumno, -1);
                       return false;
                     }}
                     onPointerDown={(e) => handlePointerDown(e, i, it.key)}
