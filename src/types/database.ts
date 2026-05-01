@@ -64,6 +64,32 @@ export interface Database {
           created_at?: string;
         };
       };
+      asistencias: {
+        Row: {
+          id: string;
+          alumno_id: string;
+          fecha: string;
+          estado: "present" | "absent" | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          alumno_id: string;
+          fecha: string;
+          estado?: "present" | "absent" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          alumno_id?: string;
+          fecha?: string;
+          estado?: "present" | "absent" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
