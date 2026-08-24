@@ -115,7 +115,6 @@ export default function ShopEstrellasPage() {
         luna: alumno.luna,
         pow: alumno.pow,
       };
-      // @ts-expect-error Supabase client table generic infers never in strict build
       await client.from("alumnos").update(payload).eq("id", alumno.id);
       fetchAlumnos();
     },
@@ -140,7 +139,6 @@ export default function ShopEstrellasPage() {
       luna: 0,
       pow: 0,
     };
-    // @ts-expect-error Supabase client table generic infers never in strict build
     await client.from("alumnos").insert(payload);
     setNombre("");
     fetchAlumnos();

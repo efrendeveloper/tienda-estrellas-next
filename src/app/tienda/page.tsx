@@ -86,7 +86,6 @@ export default function TiendaPage() {
       };
       const client = createSupabaseClient();
       if (!client) return;
-      // @ts-expect-error Supabase client table generic infers never in strict build
       await client.from("alumnos").update(payload).eq("id", selectedId);
       fetchAlumnos();
       try {

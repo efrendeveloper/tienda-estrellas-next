@@ -25,16 +25,25 @@ export function AuthMenu() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const { error: err } = await signIn(email, password);
-    setBusy(false);
-    if (err) {
-      setError(err);
-      return;
+    try {
+      const { error: err } = await signIn(email, password);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setOpen(false);
+      setEmail("");
+      setPassword("");
+      router.push("/shop_estrellas");
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Error de red o conexión";
+      setError(msg);
+    } finally {
+      setBusy(false);
     }
-    setOpen(false);
-    setEmail("");
-    setPassword("");
-    router.push("/shop_estrellas");
   };
 
   const handleSignOut = async () => {

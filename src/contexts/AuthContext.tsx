@@ -163,11 +163,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return { error: "Supabase no configurado" };
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      return { error: error?.message ?? null };
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        return { error: error?.message ?? null };
+      } catch (e: unknown) {
+        if (!isAbortLike(e)) console.warn("signIn error:", e);
+        const msg =
+          e && typeof e === "object" && "message" in e
+            ? String((e as { message: string }).message)
+            : "Error de conexión al servidor";
+        return { error: `No se pudo conectar con el servidor de autenticación (${msg})` };
+      }
     },
     [supabase]
   );

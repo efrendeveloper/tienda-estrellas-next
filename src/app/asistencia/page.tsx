@@ -145,8 +145,7 @@ export default function AsistenciaPage() {
         estado,
       };
 
-      const { error } = await supabase
-        .from("asistencias")
+      const { error } = await (supabase.from("asistencias") as any)
         .upsert(payload, { onConflict: "alumno_id,fecha" })
         .select("id")
         .single();

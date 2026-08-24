@@ -22,6 +22,7 @@ export interface Database {
           role?: "admin" | "collaborator" | "viewer";
           updated_at?: string;
         };
+        Relationships: [];
       };
       alumnos: {
         Row: {
@@ -63,6 +64,7 @@ export interface Database {
           pow?: number;
           created_at?: string;
         };
+        Relationships: [];
       };
       asistencias: {
         Row: {
@@ -89,7 +91,29 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: "asistencias_alumno_id_fkey";
+            columns: ["alumno_id"];
+            isOneToOne: false;
+            referencedRelation: "alumnos";
+            referencedColumns: ["id"];
+          }
+        ];
       };
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
     };
   };
 }
+
