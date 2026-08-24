@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AuthMenu } from "@/components/AuthMenu";
+import { useAuth } from "@/contexts/AuthContext";
 
 const WHY_CHOOSE_US = [
   {
@@ -77,6 +78,8 @@ const POPULAR_VIDEOS = [
 ];
 
 export default function AcademiaLandingPage() {
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white font-sans">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#1a1a1a]/95 backdrop-blur">
@@ -89,7 +92,15 @@ export default function AcademiaLandingPage() {
             />
             <p className="text-xs sm:text-sm font-semibold tracking-wide">Academia de Bateria</p>
           </div>
-          <div className="md:hidden">
+          <div className="flex items-center gap-2 md:hidden">
+            {user && (
+              <Link
+                href="/shop_estrellas"
+                className="rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Shop Estrellas
+              </Link>
+            )}
             <AuthMenu />
           </div>
           <nav className="hidden items-center gap-2 md:flex">
@@ -108,6 +119,14 @@ export default function AcademiaLandingPage() {
             <a href="#clase-prueba" className="rounded-md px-3 py-2 text-xs text-white/85 hover:bg-white/10">
               Clase de prueba
             </a>
+            {user && (
+              <Link
+                href="/shop_estrellas"
+                className="rounded-md bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Shop Estrellas
+              </Link>
+            )}
             <AuthMenu />
           </nav>
         </div>

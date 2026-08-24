@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -110,6 +111,13 @@ export function AuthMenu() {
                 </p>
                 {roleLabel && <p className="mt-1 text-[10px] text-red-300">{roleLabel}</p>}
               </div>
+              <Link
+                href="/shop_estrellas"
+                onClick={() => setUserMenuOpen(false)}
+                className="mb-1 block w-full rounded-md bg-red-600 px-3 py-2 text-left text-[10px] font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Shop Estrellas
+              </Link>
               <button
                 type="button"
                 onClick={() => {
