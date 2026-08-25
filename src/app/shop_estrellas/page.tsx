@@ -19,6 +19,7 @@ const ROULETTE_STRIP_KEYS = [
   "hongos",
   "item_box",
   "luna",
+  "cerezas",
   "monedas",
 ] as const;
 
@@ -31,6 +32,7 @@ const ROULETTE_PRIZE_LABEL: Partial<Record<RouletteStripKey, string>> = {
   hongos: "¡Hongo 1-UP!",
   item_box: "¡Caja sorpresa!",
   luna: "¡Luna!",
+  cerezas: "¡Cerezas!",
   monedas: "¡Moneda!",
 };
 
@@ -91,6 +93,7 @@ export default function ShopEstrellasPage() {
         item_box: r.item_box ?? 0,
         luna: r.luna ?? 0,
         pow: r.pow ?? 0,
+        cerezas: r.cerezas ?? 0,
         created_at: r.created_at,
       }))
     );
@@ -114,6 +117,7 @@ export default function ShopEstrellasPage() {
         item_box: alumno.item_box,
         luna: alumno.luna,
         pow: alumno.pow,
+        cerezas: alumno.cerezas,
       };
       await client.from("alumnos").update(payload).eq("id", alumno.id);
       fetchAlumnos();
@@ -138,6 +142,7 @@ export default function ShopEstrellasPage() {
       item_box: 0,
       luna: 0,
       pow: 0,
+      cerezas: 0,
     };
     await client.from("alumnos").insert(payload);
     setNombre("");

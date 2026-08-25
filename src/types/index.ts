@@ -9,6 +9,7 @@ export interface Alumno {
   item_box: number;
   luna: number;
   pow: number;
+  cerezas: number;
   created_at?: string;
 }
 
@@ -23,6 +24,7 @@ export interface ShopItem {
     | "item_box"
     | "luna"
     | "pow"
+    | "cerezas"
   >;
   price: number;
   file: string;
@@ -37,6 +39,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "item_box", key: "item_box", price: 10, file: "item_box1.gif", title: "Caja Sorpresa" },
   { id: "luna", key: "luna", price: 100, file: "luna.png", title: "Luna" },
   { id: "pow", key: "pow", price: 200, file: "pow.png", title: "POW" },
+  { id: "cerezas", key: "cerezas", price: 150, file: "cerezas.png", title: "Cerezas" },
 ];
 
 export const ITEMS_FOR_DISPLAY = [
@@ -48,4 +51,5 @@ export const ITEMS_FOR_DISPLAY = [
   { key: "item_box" as const, file: "item_box1.gif" },
   { key: "luna" as const, file: "luna.png" },
   { key: "pow" as const, file: "pow.png" },
+  { key: "cerezas" as const, file: "cerezas.png" },
 ];

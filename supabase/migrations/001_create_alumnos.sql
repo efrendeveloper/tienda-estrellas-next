@@ -10,8 +10,11 @@ create table if not exists public.alumnos (
   item_box int not null default 0,
   luna int not null default 0,
   pow int not null default 0,
+  cerezas int not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table public.alumnos add column if not exists cerezas int not null default 0;
 
 -- Habilitar RLS (Row Level Security) y política para permitir todo desde anon (ajusta en producción)
 alter table public.alumnos enable row level security;

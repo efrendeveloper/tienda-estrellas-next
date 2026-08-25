@@ -36,6 +36,7 @@ export interface Database {
           item_box: number;
           luna: number;
           pow: number;
+          cerezas: number;
           created_at: string;
         };
         Insert: {
@@ -49,6 +50,7 @@ export interface Database {
           item_box?: number;
           luna?: number;
           pow?: number;
+          cerezas?: number;
           created_at?: string;
         };
         Update: {
@@ -62,6 +64,7 @@ export interface Database {
           item_box?: number;
           luna?: number;
           pow?: number;
+          cerezas?: number;
           created_at?: string;
         };
         Relationships: [];

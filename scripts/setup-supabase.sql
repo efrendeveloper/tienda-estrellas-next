@@ -3,7 +3,7 @@
 -- Ejecuta este script en Supabase → SQL Editor → New query
 -- ============================================================
 
--- Tabla alumnos (monedas, estrellas, maxi, ultra, hongos, caja sorpresa, luna)
+-- Tabla alumnos (monedas, estrellas, maxi, ultra, hongos, caja sorpresa, luna, pow, cerezas)
 create table if not exists public.alumnos (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
@@ -15,8 +15,12 @@ create table if not exists public.alumnos (
   item_box int not null default 0,
   luna int not null default 0,
   pow int not null default 0,
+  cerezas int not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Si la tabla ya existe, agregar la columna cerezas
+alter table public.alumnos add column if not exists cerezas int not null default 0;
 
 -- Habilitar RLS (Row Level Security)
 alter table public.alumnos enable row level security;
