@@ -44,6 +44,11 @@ export default function TiendaPage() {
         luna: r.luna ?? 0,
         pow: r.pow ?? 0,
         cerezas: r.cerezas ?? 0,
+        hongo_gold: r.hongo_gold ?? 0,
+        key: r.key ?? 0,
+        rayo: r.rayo ?? 0,
+        red_coin: r.red_coin ?? 0,
+        cube_yellow: r.cube_yellow ?? 0,
         created_at: r.created_at,
       }))
     );
@@ -85,6 +90,11 @@ export default function TiendaPage() {
         luna: updated.luna,
         pow: updated.pow,
         cerezas: updated.cerezas,
+        hongo_gold: updated.hongo_gold,
+        key: updated.key,
+        rayo: updated.rayo,
+        red_coin: updated.red_coin,
+        cube_yellow: updated.cube_yellow,
       };
       const client = createSupabaseClient();
       if (!client) return;

@@ -23,9 +23,17 @@ const ROULETTE_STRIP_KEYS = [
   "monedas",
 ] as const;
 
-type RouletteStripKey = (typeof ROULETTE_STRIP_KEYS)[number];
+const YELLOW_CUBE_STRIP_KEYS = [
+  "red_coin",
+  "hongos",
+  "estrellas",
+  "maxiestrellas",
+  "ultraestrellas",
+] as const;
 
-const ROULETTE_PRIZE_LABEL: Partial<Record<RouletteStripKey, string>> = {
+type RouletteStripKey = (typeof ROULETTE_STRIP_KEYS)[number] | (typeof YELLOW_CUBE_STRIP_KEYS)[number];
+
+const ROULETTE_PRIZE_LABEL: Record<string, string> = {
   estrellas: "¡Estrella!",
   maxiestrellas: "¡Maxi estrella!",
   ultraestrellas: "¡Ultra estrella!",
@@ -34,9 +42,14 @@ const ROULETTE_PRIZE_LABEL: Partial<Record<RouletteStripKey, string>> = {
   luna: "¡Luna!",
   cerezas: "¡Cerezas!",
   monedas: "¡Moneda!",
+  hongo_gold: "¡Hongo Dorado!",
+  key: "¡Llave Gold!",
+  rayo: "¡Rayo!",
+  red_coin: "¡Moneda Roja!",
+  cube_yellow: "¡Cubo Amarillo!",
 };
 
-function stripItemFile(key: RouletteStripKey): string {
+function stripItemFile(key: string): string {
   return ITEMS_FOR_DISPLAY.find((it) => it.key === key)?.file ?? "star.png";
 }
 const ROULETTE_SPIN_STEPS = 34;
@@ -94,6 +107,11 @@ export default function ShopEstrellasPage() {
         luna: r.luna ?? 0,
         pow: r.pow ?? 0,
         cerezas: r.cerezas ?? 0,
+        hongo_gold: r.hongo_gold ?? 0,
+        key: r.key ?? 0,
+        rayo: r.rayo ?? 0,
+        red_coin: r.red_coin ?? 0,
+        cube_yellow: r.cube_yellow ?? 0,
         created_at: r.created_at,
       }))
     );
@@ -118,6 +136,11 @@ export default function ShopEstrellasPage() {
         luna: alumno.luna,
         pow: alumno.pow,
         cerezas: alumno.cerezas,
+        hongo_gold: alumno.hongo_gold,
+        key: alumno.key,
+        rayo: alumno.rayo,
+        red_coin: alumno.red_coin,
+        cube_yellow: alumno.cube_yellow,
       };
       await client.from("alumnos").update(payload).eq("id", alumno.id);
       fetchAlumnos();
@@ -143,6 +166,11 @@ export default function ShopEstrellasPage() {
       luna: 0,
       pow: 0,
       cerezas: 0,
+      hongo_gold: 0,
+      key: 0,
+      rayo: 0,
+      red_coin: 0,
+      cube_yellow: 0,
     };
     await client.from("alumnos").insert(payload);
     setNombre("");
@@ -252,38 +280,52 @@ export default function ShopEstrellasPage() {
     [alumnos, saveAlumno, playCoin, canEdit]
   );
 
+  const [rouletteBoxType, setRouletteBoxType] = useState<"item_box" | "cube_yellow">("item_box");
+
   const openRoulette = useCallback(
-    async (alumnoIndex: number) => {
+    async (alumnoIndex: number, boxType: "item_box" | "cube_yellow" = "item_box") => {
       if (!canEdit || rollingRef.current) return;
       const a = alumnos[alumnoIndex];
-      if (a.monedas <= 0 || a.item_box <= 0) {
-        alert("No tienes monedas o cajas suficientes para usar la ruleta.");
+      const boxCount = boxType === "cube_yellow" ? a.cube_yellow : a.item_box;
+      if (a.monedas <= 0 || boxCount <= 0) {
+        alert(
+          boxType === "cube_yellow"
+            ? "No tienes monedas o cubos amarillos suficientes para usar la ruleta."
+            : "No tienes monedas o cajas suficientes para usar la ruleta."
+        );
         return;
       }
       rollingRef.current = true;
-      const keys = ITEMS_FOR_DISPLAY.filter(
-        (it) => it.key !== "pow" && it.key !== "monedas"
-      ).map((it) => it.key);
+      setRouletteBoxType(boxType);
+      const activeStrip: readonly string[] =
+        boxType === "cube_yellow" ? YELLOW_CUBE_STRIP_KEYS : ROULETTE_STRIP_KEYS;
+      const keys =
+        boxType === "cube_yellow"
+          ? ["red_coin", "hongos", "estrellas", "maxiestrellas", "ultraestrellas"]
+          : ITEMS_FOR_DISPLAY.filter(
+              (it) => it.key !== "pow" && it.key !== "monedas"
+            ).map((it) => it.key);
+
       const choice = keys[Math.floor(Math.random() * keys.length)];
       setRouletteWinner(null);
       setRouletteOpen(true);
-      setRouletteHighlight(3);
+      setRouletteHighlight(0);
 
       for (let step = 0; step < ROULETTE_SPIN_STEPS; step += 1) {
-        setRouletteHighlight(Math.floor(Math.random() * ROULETTE_STRIP_KEYS.length));
+        setRouletteHighlight(Math.floor(Math.random() * activeStrip.length));
         playCoin();
         // eslint-disable-next-line no-await-in-loop
         await new Promise((resolve) => setTimeout(resolve, rouletteStepDelayMs(step)));
       }
 
-      const winIdx = ROULETTE_STRIP_KEYS.indexOf(choice as RouletteStripKey);
+      const winIdx = activeStrip.indexOf(choice);
       setRouletteHighlight(winIdx >= 0 ? winIdx : 0);
       setRouletteWinner(choice);
       const updated = {
         ...a,
         monedas: Math.max(0, a.monedas - 1),
-        item_box: Math.max(0, a.item_box - 1),
-        [choice]: (a as unknown as Record<string, number>)[choice] + 1,
+        [boxType]: Math.max(0, (a[boxType] ?? 0) - 1),
+        [choice]: ((a as unknown as Record<string, number>)[choice] ?? 0) + 1,
       };
       const newList = [...alumnos];
       newList[alumnoIndex] = updated;
@@ -361,7 +403,7 @@ export default function ShopEstrellasPage() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
-      const wantsRoulette = key === "item_box" && e.button === 0;
+      const wantsRoulette = (key === "item_box" || key === "cube_yellow") && e.button === 0;
       const wantsPow = key === "pow" && e.button === 2;
       if (!canEdit || powGameRunning || rollingRef.current || (!wantsRoulette && !wantsPow)) return;
       if (wantsPow) e.preventDefault();
@@ -393,7 +435,7 @@ export default function ShopEstrellasPage() {
           playCharge(false);
           if (ringEl) ringEl.classList.add("hidden");
           if (state.action === "pow") void startPowGame(state.index);
-          else void openRoulette(state.index);
+          else void openRoulette(state.index, state.key as "item_box" | "cube_yellow");
           state.action = null;
           return;
         }
@@ -517,12 +559,14 @@ export default function ShopEstrellasPage() {
                     data-index={i}
                     onClick={() => {
                       if (!canEdit || powGameRunning) return;
-                      if (it.key !== "item_box") changeCount(i, it.key as keyof Alumno, 1);
+                      if (it.key !== "item_box" && it.key !== "cube_yellow") {
+                        changeCount(i, it.key as keyof Alumno, 1);
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (!canEdit || powGameRunning) return false;
-                      if (it.key !== "item_box" && it.key !== "pow") {
+                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "pow") {
                         changeCount(i, it.key as keyof Alumno, -1);
                       }
                       return false;
@@ -568,7 +612,7 @@ export default function ShopEstrellasPage() {
           aria-label="Ruleta sorpresa"
         >
           <h2 className="px-5 pt-5 md:px-8 md:pt-6 text-[10px] sm:text-xs md:text-sm leading-relaxed tracking-wide text-white drop-shadow-sm">
-            Ruleta sorpresa!
+            {rouletteBoxType === "cube_yellow" ? "¡Ruleta Cubo Amarillo!" : "¡Ruleta sorpresa!"}
           </h2>
 
           <div className="flex flex-1 items-center justify-center px-3 py-6 md:px-6">
@@ -577,7 +621,7 @@ export default function ShopEstrellasPage() {
                 !rouletteWinner ? "ruleta-strip-spinning" : ""
               }`}
             >
-              {ROULETTE_STRIP_KEYS.map((key, i) => {
+              {(rouletteBoxType === "cube_yellow" ? YELLOW_CUBE_STRIP_KEYS : ROULETTE_STRIP_KEYS).map((key, i) => {
                 const active = rouletteHighlight !== null && i === rouletteHighlight;
                 return (
                   <div
@@ -601,7 +645,7 @@ export default function ShopEstrellasPage() {
 
           <p className="px-4 pb-6 md:pb-8 text-center text-[8px] sm:text-[10px] md:text-xs leading-relaxed text-white/95">
             {rouletteWinner
-              ? ROULETTE_PRIZE_LABEL[rouletteWinner as RouletteStripKey] ?? "¡Premio!"
+              ? ROULETTE_PRIZE_LABEL[rouletteWinner] ?? "¡Premio!"
               : "La ruleta se detendra pronto..."}
           </p>
         </div>

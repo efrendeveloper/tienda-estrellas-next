@@ -37,6 +37,11 @@ export interface Database {
           luna: number;
           pow: number;
           cerezas: number;
+          hongo_gold: number;
+          key: number;
+          rayo: number;
+          red_coin: number;
+          cube_yellow: number;
           created_at: string;
         };
         Insert: {
@@ -51,6 +56,11 @@ export interface Database {
           luna?: number;
           pow?: number;
           cerezas?: number;
+          hongo_gold?: number;
+          key?: number;
+          rayo?: number;
+          red_coin?: number;
+          cube_yellow?: number;
           created_at?: string;
         };
         Update: {
@@ -65,6 +75,11 @@ export interface Database {
           luna?: number;
           pow?: number;
           cerezas?: number;
+          hongo_gold?: number;
+          key?: number;
+          rayo?: number;
+          red_coin?: number;
+          cube_yellow?: number;
           created_at?: string;
         };
         Relationships: [];

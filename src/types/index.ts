@@ -10,6 +10,11 @@ export interface Alumno {
   luna: number;
   pow: number;
   cerezas: number;
+  hongo_gold: number;
+  key: number;
+  rayo: number;
+  red_coin: number;
+  cube_yellow: number;
   created_at?: string;
 }
 
@@ -25,6 +30,11 @@ export interface ShopItem {
     | "luna"
     | "pow"
     | "cerezas"
+    | "hongo_gold"
+    | "key"
+    | "rayo"
+    | "red_coin"
+    | "cube_yellow"
   >;
   price: number;
   file: string;
@@ -40,6 +50,11 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "luna", key: "luna", price: 100, file: "luna.png", title: "Luna" },
   { id: "pow", key: "pow", price: 200, file: "pow.png", title: "POW" },
   { id: "cerezas", key: "cerezas", price: 150, file: "cerezas.png", title: "Cerezas" },
+  { id: "hongo_gold", key: "hongo_gold", price: 200, file: "hongo_gold.png", title: "Hongo Gold" },
+  { id: "key", key: "key", price: 80, file: "key.png", title: "Key" },
+  { id: "rayo", key: "rayo", price: 50, file: "rayo.png", title: "Rayo" },
+  { id: "red_coin", key: "red_coin", price: 10, file: "red_coin.png", title: "Red Coin" },
+  { id: "cube_yellow", key: "cube_yellow", price: 5, file: "cube_yellow.png", title: "Cube Yellow" },
 ];
 
 export const ITEMS_FOR_DISPLAY = [
@@ -52,4 +67,9 @@ export const ITEMS_FOR_DISPLAY = [
   { key: "luna" as const, file: "luna.png" },
   { key: "pow" as const, file: "pow.png" },
   { key: "cerezas" as const, file: "cerezas.png" },
+  { key: "hongo_gold" as const, file: "hongo_gold.png" },
+  { key: "key" as const, file: "key.png" },
+  { key: "rayo" as const, file: "rayo.png" },
+  { key: "red_coin" as const, file: "red_coin.png" },
+  { key: "cube_yellow" as const, file: "cube_yellow.png" },
 ];
