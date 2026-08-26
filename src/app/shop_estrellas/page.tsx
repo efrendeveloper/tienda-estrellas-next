@@ -31,7 +31,27 @@ const YELLOW_CUBE_STRIP_KEYS = [
   "ultraestrellas",
 ] as const;
 
-type RouletteStripKey = (typeof ROULETTE_STRIP_KEYS)[number] | (typeof YELLOW_CUBE_STRIP_KEYS)[number];
+const CEREZAS_STRIP_KEYS = [
+  "monedas",
+  "estrellas",
+  "maxiestrellas",
+  "ultraestrellas",
+  "hongos",
+  "item_box",
+  "luna",
+  "pow",
+  "cerezas",
+  "hongo_gold",
+  "key",
+  "rayo",
+  "red_coin",
+  "cube_yellow",
+] as const;
+
+type RouletteStripKey =
+  | (typeof ROULETTE_STRIP_KEYS)[number]
+  | (typeof YELLOW_CUBE_STRIP_KEYS)[number]
+  | (typeof CEREZAS_STRIP_KEYS)[number];
 
 const ROULETTE_PRIZE_LABEL: Record<string, string> = {
   estrellas: "¡Estrella!",
@@ -280,27 +300,40 @@ export default function ShopEstrellasPage() {
     [alumnos, saveAlumno, playCoin, canEdit]
   );
 
-  const [rouletteBoxType, setRouletteBoxType] = useState<"item_box" | "cube_yellow">("item_box");
+  const [rouletteBoxType, setRouletteBoxType] = useState<"item_box" | "cube_yellow" | "cerezas">("item_box");
 
   const openRoulette = useCallback(
-    async (alumnoIndex: number, boxType: "item_box" | "cube_yellow" = "item_box") => {
+    async (alumnoIndex: number, boxType: "item_box" | "cube_yellow" | "cerezas" = "item_box") => {
       if (!canEdit || rollingRef.current) return;
       const a = alumnos[alumnoIndex];
-      const boxCount = boxType === "cube_yellow" ? a.cube_yellow : a.item_box;
-      if (a.monedas <= 0 || boxCount <= 0) {
-        alert(
-          boxType === "cube_yellow"
-            ? "No tienes monedas o cubos amarillos suficientes para usar la ruleta."
-            : "No tienes monedas o cajas suficientes para usar la ruleta."
-        );
-        return;
+      if (boxType === "cerezas") {
+        if (a.cerezas <= 0) {
+          alert("No tienes cerezas suficientes para usar la ruleta duplicadora.");
+          return;
+        }
+      } else {
+        const boxCount = boxType === "cube_yellow" ? a.cube_yellow : a.item_box;
+        if (a.monedas <= 0 || boxCount <= 0) {
+          alert(
+            boxType === "cube_yellow"
+              ? "No tienes monedas o cubos amarillos suficientes para usar la ruleta."
+              : "No tienes monedas o cajas suficientes para usar la ruleta."
+          );
+          return;
+        }
       }
       rollingRef.current = true;
       setRouletteBoxType(boxType);
       const activeStrip: readonly string[] =
-        boxType === "cube_yellow" ? YELLOW_CUBE_STRIP_KEYS : ROULETTE_STRIP_KEYS;
+        boxType === "cerezas"
+          ? CEREZAS_STRIP_KEYS
+          : boxType === "cube_yellow"
+          ? YELLOW_CUBE_STRIP_KEYS
+          : ROULETTE_STRIP_KEYS;
       const keys =
-        boxType === "cube_yellow"
+        boxType === "cerezas"
+          ? [...CEREZAS_STRIP_KEYS]
+          : boxType === "cube_yellow"
           ? ["red_coin", "hongos", "estrellas", "maxiestrellas", "ultraestrellas"]
           : ITEMS_FOR_DISPLAY.filter(
               (it) => it.key !== "pow" && it.key !== "monedas"
@@ -321,12 +354,26 @@ export default function ShopEstrellasPage() {
       const winIdx = activeStrip.indexOf(choice);
       setRouletteHighlight(winIdx >= 0 ? winIdx : 0);
       setRouletteWinner(choice);
-      const updated = {
-        ...a,
-        monedas: Math.max(0, a.monedas - 1),
-        [boxType]: Math.max(0, (a[boxType] ?? 0) - 1),
-        [choice]: ((a as unknown as Record<string, number>)[choice] ?? 0) + 1,
-      };
+
+      let updated: Alumno;
+      if (boxType === "cerezas") {
+        const remainingCerezas = Math.max(0, a.cerezas - 1);
+        const tempState = { ...a, cerezas: remainingCerezas };
+        const currentVal = (tempState as unknown as Record<string, number>)[choice] ?? 0;
+        const duplicatedVal = currentVal > 0 ? Math.min(999, currentVal * 2) : 1;
+        updated = {
+          ...tempState,
+          [choice]: duplicatedVal,
+        };
+      } else {
+        updated = {
+          ...a,
+          monedas: Math.max(0, a.monedas - 1),
+          [boxType]: Math.max(0, (a[boxType] ?? 0) - 1),
+          [choice]: ((a as unknown as Record<string, number>)[choice] ?? 0) + 1,
+        };
+      }
+
       const newList = [...alumnos];
       newList[alumnoIndex] = updated;
       setAlumnos(newList);
@@ -403,7 +450,8 @@ export default function ShopEstrellasPage() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
-      const wantsRoulette = (key === "item_box" || key === "cube_yellow") && e.button === 0;
+      const wantsRoulette =
+        (key === "item_box" || key === "cube_yellow" || key === "cerezas") && e.button === 0;
       const wantsPow = key === "pow" && e.button === 2;
       if (!canEdit || powGameRunning || rollingRef.current || (!wantsRoulette && !wantsPow)) return;
       if (wantsPow) e.preventDefault();
@@ -435,7 +483,7 @@ export default function ShopEstrellasPage() {
           playCharge(false);
           if (ringEl) ringEl.classList.add("hidden");
           if (state.action === "pow") void startPowGame(state.index);
-          else void openRoulette(state.index, state.key as "item_box" | "cube_yellow");
+          else void openRoulette(state.index, state.key as "item_box" | "cube_yellow" | "cerezas");
           state.action = null;
           return;
         }
@@ -559,14 +607,14 @@ export default function ShopEstrellasPage() {
                     data-index={i}
                     onClick={() => {
                       if (!canEdit || powGameRunning) return;
-                      if (it.key !== "item_box" && it.key !== "cube_yellow") {
+                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "cerezas") {
                         changeCount(i, it.key as keyof Alumno, 1);
                       }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (!canEdit || powGameRunning) return false;
-                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "pow") {
+                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "pow" && it.key !== "cerezas") {
                         changeCount(i, it.key as keyof Alumno, -1);
                       }
                       return false;
@@ -612,7 +660,11 @@ export default function ShopEstrellasPage() {
           aria-label="Ruleta sorpresa"
         >
           <h2 className="px-5 pt-5 md:px-8 md:pt-6 text-[10px] sm:text-xs md:text-sm leading-relaxed tracking-wide text-white drop-shadow-sm">
-            {rouletteBoxType === "cube_yellow" ? "¡Ruleta Cubo Amarillo!" : "¡Ruleta sorpresa!"}
+            {rouletteBoxType === "cerezas"
+              ? "¡Ruleta Duplicadora Cerezas!"
+              : rouletteBoxType === "cube_yellow"
+              ? "¡Ruleta Cubo Amarillo!"
+              : "¡Ruleta sorpresa!"}
           </h2>
 
           <div className="flex flex-1 items-center justify-center px-3 py-6 md:px-6">
@@ -621,7 +673,12 @@ export default function ShopEstrellasPage() {
                 !rouletteWinner ? "ruleta-strip-spinning" : ""
               }`}
             >
-              {(rouletteBoxType === "cube_yellow" ? YELLOW_CUBE_STRIP_KEYS : ROULETTE_STRIP_KEYS).map((key, i) => {
+              {(rouletteBoxType === "cerezas"
+                ? CEREZAS_STRIP_KEYS
+                : rouletteBoxType === "cube_yellow"
+                ? YELLOW_CUBE_STRIP_KEYS
+                : ROULETTE_STRIP_KEYS
+              ).map((key, i) => {
                 const active = rouletteHighlight !== null && i === rouletteHighlight;
                 return (
                   <div
@@ -645,7 +702,9 @@ export default function ShopEstrellasPage() {
 
           <p className="px-4 pb-6 md:pb-8 text-center text-[8px] sm:text-[10px] md:text-xs leading-relaxed text-white/95">
             {rouletteWinner
-              ? ROULETTE_PRIZE_LABEL[rouletteWinner] ?? "¡Premio!"
+              ? rouletteBoxType === "cerezas"
+                ? `¡Duplicado! ${ROULETTE_PRIZE_LABEL[rouletteWinner] ?? "¡Premio!"} (x2)`
+                : ROULETTE_PRIZE_LABEL[rouletteWinner] ?? "¡Premio!"
               : "La ruleta se detendra pronto..."}
           </p>
         </div>
