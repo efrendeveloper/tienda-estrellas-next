@@ -17,7 +17,7 @@ const NAV = [
 
 export function AppTopBar() {
   const pathname = usePathname();
-  const { user, loading } = useAuth();
+  const { user, canEdit, loading } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
 
   if (loading) return null;
@@ -29,6 +29,11 @@ export function AppTopBar() {
     );
   }
 
+  const navItems = [
+    ...NAV,
+    ...(canEdit ? [{ href: "/edrums-hero", label: "Edrums-hero" }] : []),
+  ];
+
   return (
     <header
       className="fixed top-0 left-0 right-0 z-[5000] flex h-12 sm:h-14 items-stretch justify-between gap-2 sm:gap-4 border-b border-white/10 bg-[#1a1a1a]/95 px-2 sm:px-4 font-sans backdrop-blur"
@@ -37,7 +42,7 @@ export function AppTopBar() {
         className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 md:flex [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Principal"
       >
-        {NAV.map(({ href, label }) => {
+        {navItems.map(({ href, label }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
@@ -75,7 +80,7 @@ export function AppTopBar() {
         <AuthMenu />
         {navOpen && (
           <div className="absolute right-0 top-11 w-48 rounded-xl border border-white/15 bg-[#1a1a1a] p-2 shadow-2xl md:hidden">
-            {NAV.map(({ href, label }) => {
+            {navItems.map(({ href, label }) => {
               const active = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <Link
