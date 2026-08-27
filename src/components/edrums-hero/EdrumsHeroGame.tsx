@@ -12,10 +12,24 @@ import {
 import { DrumHighwayCanvas } from "./DrumHighwayCanvas";
 import { midiManager, MidiDevice } from "./midiManager";
 import { SAMPLE_PRESETS, generateSampleSynthAudio } from "./sampleBeats";
+import { createSupabaseClient } from "@/lib/supabase";
+import type { Alumno } from "@/types";
 
 export function EdrumsHeroGame() {
   // Mode: "play" | "map"
   const [mode, setMode] = useState<"play" | "map">("play");
+
+  // Alumnos & Database State
+  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [selectedAlumnoId, setSelectedAlumnoId] = useState<string | null>(null);
+  const [loadingAlumnos, setLoadingAlumnos] = useState(true);
+  const [hasDeductedKey, setHasDeductedKey] = useState(false);
+  const [endGameReward, setEndGameReward] = useState<{
+    item: "cube_yellow" | "luna" | "pow" | null;
+    title: string;
+    message: string;
+    image: string | null;
+  } | null>(null);
 
   // Audio State
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -75,6 +89,132 @@ export function EdrumsHeroGame() {
     }
   }, [activeChart]);
 
+  // Fetch alumnos from Supabase
+  const fetchAlumnos = useCallback(async () => {
+    setLoadingAlumnos(true);
+    const client = createSupabaseClient();
+    if (!client) {
+      setLoadingAlumnos(false);
+      return;
+    }
+    const { data, error } = await client
+      .from("alumnos")
+      .select("*")
+      .order("nombre", { ascending: true });
+
+    if (error) {
+      console.error("Error al cargar alumnos:", error);
+      setLoadingAlumnos(false);
+      return;
+    }
+
+    if (data) {
+      const list: Alumno[] = data.map((r: any) => ({
+        id: r.id,
+        nombre: r.nombre,
+        monedas: r.monedas ?? 0,
+        estrellas: r.estrellas ?? 0,
+        maxiestrellas: r.maxiestrellas ?? 0,
+        ultraestrellas: r.ultraestrellas ?? 0,
+        hongos: r.hongos ?? 0,
+        item_box: r.item_box ?? 0,
+        luna: r.luna ?? 0,
+        pow: r.pow ?? 0,
+        cerezas: r.cerezas ?? 0,
+        hongo_gold: r.hongo_gold ?? 0,
+        key: r.key ?? 0,
+        rayo: r.rayo ?? 0,
+        red_coin: r.red_coin ?? 0,
+        cube_yellow: r.cube_yellow ?? 0,
+        created_at: r.created_at,
+      }));
+      setAlumnos(list);
+      setSelectedAlumnoId((prev) => prev || (list.length > 0 ? list[0].id : null));
+    }
+    setLoadingAlumnos(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAlumnos();
+  }, [fetchAlumnos]);
+
+  const selectedAlumno = alumnos.find((a) => a.id === selectedAlumnoId) || null;
+
+  // Process game completion and assign rewards
+  const processGameCompletion = useCallback(async () => {
+    setIsPlaying(false);
+    if (mode !== "play") return;
+
+    setShowSummary(true);
+
+    const totalHit = hitsCount.perfect + hitsCount.great + hitsCount.good;
+    const totalNotes = notes.length;
+    const acc = totalNotes > 0 ? Math.round((totalHit / (totalHit + hitsCount.miss || 1)) * 100) : 0;
+
+    let rewardItem: "cube_yellow" | "luna" | "pow" | null = null;
+    let rewardTitle = "";
+    let rewardMessage = "";
+    let rewardImage: string | null = null;
+
+    if (totalHit <= 1 || acc < 15) {
+      // No presionó nada o casi nada
+      rewardItem = null;
+      rewardTitle = "¡Inténtalo de nuevo!";
+      rewardMessage = "No lograste aciertos suficientes en esta canción.";
+      rewardImage = null;
+    } else if (acc >= 85) {
+      // Excelente
+      rewardItem = "cube_yellow";
+      rewardTitle = "¡Excelente Calificación!";
+      rewardMessage = "¡Gran desempeño y precisión! Has ganado 1 Cubo Amarillo (cube_yellow).";
+      rewardImage = "/image/cube_yellow.png";
+    } else if (acc >= 60) {
+      // Bien sin tantos errores
+      rewardItem = "luna";
+      rewardTitle = "¡Muy Buen Trabajo!";
+      rewardMessage = "¡Buen ritmo sin tantos errores! Has ganado 1 Luna (luna).";
+      rewardImage = "/image/luna.png";
+    } else {
+      // Asertividad muy baja (15% - 59%)
+      rewardItem = "pow";
+      rewardTitle = "Nivel de Asertividad Bajo";
+      rewardMessage = "Has obtenido 1 POW (pow). ¡Sigue practicando para mejorar!";
+      rewardImage = "/image/pow.png";
+    }
+
+    setEndGameReward({
+      item: rewardItem,
+      title: rewardTitle,
+      message: rewardMessage,
+      image: rewardImage,
+    });
+
+    if (rewardItem && selectedAlumno) {
+      const client = createSupabaseClient();
+      if (client) {
+        const currentVal = (selectedAlumno as any)[rewardItem] || 0;
+        const newVal = currentVal + 1;
+        const { error } = await client
+          .from("alumnos")
+          .update({ [rewardItem]: newVal })
+          .eq("id", selectedAlumno.id);
+
+        if (!error) {
+          setAlumnos((prev) =>
+            prev.map((a) => (a.id === selectedAlumno.id ? { ...a, [rewardItem]: newVal } : a))
+          );
+        } else {
+          console.error("Error al actualizar la recompensa en Supabase:", error);
+        }
+      }
+    }
+  }, [mode, selectedAlumno, hitsCount, notes.length]);
+
+  const processGameCompletionRef = useRef(processGameCompletion);
+  useEffect(() => {
+    processGameCompletionRef.current = processGameCompletion;
+  }, [processGameCompletion]);
+
   // Audio event listeners & sync
   useEffect(() => {
     const audio = audioRef.current;
@@ -83,8 +223,9 @@ export function EdrumsHeroGame() {
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onLoadedData = () => setDuration(audio.duration || activeChart.duration || 30);
     const onEnded = () => {
-      setIsPlaying(false);
-      if (mode === "play") setShowSummary(true);
+      if (processGameCompletionRef.current) {
+        processGameCompletionRef.current();
+      }
     };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
@@ -96,7 +237,7 @@ export function EdrumsHeroGame() {
       audio.removeEventListener("loadeddata", onLoadedData);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [mode, activeChart]);
+  }, [activeChart]);
 
   // Initialize Web MIDI
   useEffect(() => {
@@ -250,12 +391,47 @@ export function EdrumsHeroGame() {
   }, [currentTime, isPlaying, mode, notes]);
 
   // Controls Handlers
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
+      // Validar requerimiento de alumno y llave (key) en Modo Juego
+      if (mode === "play") {
+        if (!selectedAlumno) {
+          alert("Por favor selecciona un alumno para poder jugar.");
+          return;
+        }
+        if (selectedAlumno.key < 1) {
+          alert(`El alumno ${selectedAlumno.nombre} no tiene ítems de "key" (llaves). Se requiere al menos 1 llave para jugar.`);
+          return;
+        }
+
+        // Descontar 1 llave si no ha sido descontada para esta ronda
+        if (!hasDeductedKey) {
+          const client = createSupabaseClient();
+          if (client) {
+            const newKey = selectedAlumno.key - 1;
+            const { error } = await client
+              .from("alumnos")
+              .update({ key: newKey })
+              .eq("id", selectedAlumno.id);
+
+            if (error) {
+              console.error("Error al descontar llave:", error);
+              alert("Ocurrió un error al intentar descontar la llave del alumno.");
+              return;
+            }
+
+            setAlumnos((prev) =>
+              prev.map((a) => (a.id === selectedAlumno.id ? { ...a, key: newKey } : a))
+            );
+            setHasDeductedKey(true);
+          }
+        }
+      }
+
       void audioRef.current.play();
       setIsPlaying(true);
     }
@@ -272,6 +448,8 @@ export function EdrumsHeroGame() {
     setScore(0);
     setCombo(0);
     setHitsCount({ perfect: 0, great: 0, good: 0, miss: 0 });
+    setHasDeductedKey(false);
+    setEndGameReward(null);
   };
 
   const handleSpeedChange = (rate: number) => {
@@ -433,6 +611,110 @@ export function EdrumsHeroGame() {
         </div>
       </div>
 
+      {/* Student Selector Checklist Section */}
+      {mode === "play" && (
+        <div className="mb-4 p-4 rounded-2xl bg-[#111827]/90 border border-cyan-500/30 shadow-lg backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🥁</span>
+              <div>
+                <h3 className="text-sm font-bold text-cyan-300">
+                  Seleccionar Alumno para la Partida
+                </h3>
+                <p className="text-[11px] text-gray-400">
+                  Se requiere al menos <span className="text-yellow-400 font-semibold">1 Llave (Key 🔑)</span> para poder jugar.
+                </p>
+              </div>
+            </div>
+
+            {selectedAlumno && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-xs">
+                <span className="text-gray-300">Jugador:</span>
+                <span className="font-bold text-cyan-300">{selectedAlumno.nombre}</span>
+                <span className="flex items-center gap-1 font-bold text-yellow-400 bg-black/40 px-2 py-0.5 rounded-md border border-yellow-500/30">
+                  🔑 {selectedAlumno.key} {selectedAlumno.key === 1 ? "llave" : "llaves"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {loadingAlumnos ? (
+            <div className="p-4 text-center text-xs text-cyan-400 animate-pulse">
+              Cargando lista de alumnos...
+            </div>
+          ) : alumnos.length === 0 ? (
+            <div className="p-3 text-center text-xs text-gray-400 bg-gray-900/50 rounded-xl">
+              No hay alumnos registrados en el sistema.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-48 overflow-y-auto pr-1">
+              {alumnos.map((alumno) => {
+                const isSelected = selectedAlumnoId === alumno.id;
+                const hasKey = alumno.key >= 1;
+                return (
+                  <button
+                    key={alumno.id}
+                    type="button"
+                    onClick={() => {
+                      if (!isPlaying) {
+                        setSelectedAlumnoId(alumno.id);
+                        setHasDeductedKey(false);
+                      }
+                    }}
+                    disabled={isPlaying}
+                    className={`flex flex-col justify-between p-2.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? hasKey
+                          ? "bg-cyan-950/80 border-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.4)]"
+                          : "bg-red-950/60 border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]"
+                        : "bg-gray-900/60 border-white/10 hover:border-gray-600 hover:bg-gray-800/60"
+                    } ${!hasKey ? "opacity-75" : ""}`}
+                  >
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="radio"
+                        name="alumno_select"
+                        checked={isSelected}
+                        onChange={() => {
+                          if (!isPlaying) {
+                            setSelectedAlumnoId(alumno.id);
+                            setHasDeductedKey(false);
+                          }
+                        }}
+                        className="accent-cyan-400 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-gray-200 truncate flex-1">
+                        {alumno.nombre}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between w-full mt-2 pt-1 border-t border-white/10 text-[10px]">
+                      <span className="flex items-center gap-1 font-semibold text-yellow-300">
+                        🔑 {alumno.key}
+                      </span>
+                      {hasKey ? (
+                        <span className="text-green-400 font-bold">Disponible</span>
+                      ) : (
+                        <span className="text-red-400 font-bold">Sin llaves</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedAlumno && selectedAlumno.key < 1 && (
+            <div className="mt-3 p-2.5 rounded-xl bg-red-950/80 border border-red-500/50 flex items-center gap-2 text-xs text-red-200">
+              <span>⚠️</span>
+              <span>
+                <strong>{selectedAlumno.nombre}</strong> no tiene llaves (<strong>key 🔑</strong>). Se requiere al menos 1 llave para jugar. Adquiérela en la tienda de estrellas o selecciona otro alumno.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main 3D Canvas Highway */}
       <DrumHighwayCanvas
         notes={notes}
@@ -454,7 +736,12 @@ export function EdrumsHeroGame() {
             <button
               type="button"
               onClick={togglePlay}
-              className="h-10 px-5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-sm flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all"
+              disabled={mode === "play" && (!selectedAlumno || selectedAlumno.key < 1)}
+              className={`h-10 px-5 rounded-xl font-extrabold text-sm flex items-center justify-center transition-all ${
+                mode === "play" && (!selectedAlumno || selectedAlumno.key < 1)
+                  ? "bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700"
+                  : "bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_15px_rgba(0,240,255,0.4)]"
+              }`}
             >
               {isPlaying ? "⏸️ PAUSA" : "▶️ REPRODUCIR"}
             </button>
@@ -759,6 +1046,52 @@ export function EdrumsHeroGame() {
                 </div>
               </div>
             </div>
+
+            {/* Recompensa del Alumno */}
+            {endGameReward && (
+              <div className="my-4 p-4 rounded-xl bg-gradient-to-b from-gray-900 to-black border border-cyan-500/40 text-center shadow-inner">
+                {selectedAlumno && (
+                  <p className="text-[11px] text-gray-400 uppercase tracking-wider mb-2 font-semibold">
+                    Alumno: <span className="text-cyan-300 font-bold">{selectedAlumno.nombre}</span>
+                  </p>
+                )}
+
+                {endGameReward.item ? (
+                  <div className="flex flex-col items-center gap-2">
+                    {endGameReward.image && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={endGameReward.image}
+                        alt={endGameReward.title}
+                        className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.6)] animate-bounce"
+                      />
+                    )}
+                    <h4 className="text-base font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-cyan-300">
+                      {endGameReward.title}
+                    </h4>
+                    <p className="text-xs text-gray-200 leading-relaxed font-medium">
+                      {endGameReward.message}
+                    </p>
+                    <span className="mt-1 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/40 text-green-300 text-[11px] font-bold">
+                      +1 {endGameReward.item} agregado al inventario
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <span className="text-3xl animate-pulse">🔄</span>
+                    <h4 className="text-lg font-extrabold text-amber-400 tracking-wider">
+                      {endGameReward.title}
+                    </h4>
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      {endGameReward.message}
+                    </p>
+                    <span className="text-[10px] text-gray-500 italic">
+                      (No se otorgó ningún ítem en este intento)
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
