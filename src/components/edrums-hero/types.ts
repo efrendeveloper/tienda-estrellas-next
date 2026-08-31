@@ -145,3 +145,50 @@ export const DEFAULT_MIDI_MAPPING: MidiMapping = {
   crash: 49,
   splash: 55,
 };
+
+export type StageId = "concert-arena" | "cyber-portal" | "electro-dj" | "vintage-rock";
+
+export interface StageConfig {
+  id: StageId;
+  name: string;
+  shortDesc: string;
+  icon: string;
+  primaryColor: string;
+  sparkColors: string[];
+}
+
+export const STAGES: StageConfig[] = [
+  {
+    id: "concert-arena",
+    name: "🏟️ Estadio Concierto (Pirotecnia Fría)",
+    shortDesc: "Escenario de estadio con luces LED, altavoces, focos y cañones de pirotecnia fría",
+    icon: "🏟️",
+    primaryColor: "#00f0ff",
+    sparkColors: ["#ffffff", "#fff7d1", "#ffcc00", "#ffaa00", "#ff7700"],
+  },
+  {
+    id: "cyber-portal",
+    name: "🌌 Portal Cyberpunk Sci-Fi",
+    shortDesc: "Escenario futurista con túnel de energía neón, turbinas e hiperespacio",
+    icon: "🌌",
+    primaryColor: "#a855f7",
+    sparkColors: ["#ffffff", "#e2f8ff", "#00f0ff", "#a855f7", "#38bdf8"],
+  },
+  {
+    id: "electro-dj",
+    name: "🎧 DJ Electro Festival",
+    shortDesc: "Escenario de festival con ecualizadores gigantes, estrobos y luces láser",
+    icon: "🎧",
+    primaryColor: "#ff0077",
+    sparkColors: ["#ffffff", "#ff0077", "#a855f7", "#00ff66", "#ffcc00"],
+  },
+  {
+    id: "vintage-rock",
+    name: "🎸 Rock & Roll Vintage Hall",
+    shortDesc: "Escenario clásico con luces de tungsteno cálidas y fuego dorado",
+    icon: "🎸",
+    primaryColor: "#ffaa00",
+    sparkColors: ["#ffffff", "#ffe066", "#ffd700", "#ffaa00", "#d97706"],
+  },
+];
+

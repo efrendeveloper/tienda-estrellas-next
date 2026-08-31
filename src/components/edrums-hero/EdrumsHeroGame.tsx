@@ -8,6 +8,8 @@ import {
   DrumNote,
   MidiMapping,
   SongChart,
+  StageId,
+  STAGES,
 } from "./types";
 import { DrumHighwayCanvas } from "./DrumHighwayCanvas";
 import { midiManager, MidiDevice } from "./midiManager";
@@ -18,6 +20,7 @@ import type { Alumno } from "@/types";
 export function EdrumsHeroGame() {
   // Mode: "play" | "map"
   const [mode, setMode] = useState<"play" | "map">("play");
+  const [selectedStageId, setSelectedStageId] = useState<StageId>("concert-arena");
 
   // Alumnos & Database State
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -715,6 +718,63 @@ export function EdrumsHeroGame() {
         </div>
       )}
 
+      {/* Stage Selection Bar */}
+      <div className="mb-4 p-4 rounded-2xl bg-[#111827]/90 border border-cyan-500/30 shadow-lg backdrop-blur">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏟️</span>
+            <div>
+              <h3 className="text-sm font-bold text-cyan-300">
+                Seleccionar Escenario de Concierto
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                Elige la atmósfera y los efectos visuales para tu interpretación. ¡Al hacer combo se activará la pirotecnia fría!
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+          {STAGES.map((stg) => {
+            const isSelected = selectedStageId === stg.id;
+            return (
+              <button
+                key={stg.id}
+                type="button"
+                onClick={() => setSelectedStageId(stg.id)}
+                className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  isSelected
+                    ? "bg-cyan-950/90 border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.4)] scale-[1.02]"
+                    : "bg-gray-900/60 border-white/10 hover:border-gray-600 hover:bg-gray-800/60"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{stg.icon}</span>
+                  <span className="text-xs font-bold text-gray-100 line-clamp-1">
+                    {stg.name}
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5 leading-snug">
+                  {stg.shortDesc}
+                </p>
+                <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px]">
+                  <span className="text-gray-400">Chispas:</span>
+                  <div className="flex items-center gap-1">
+                    {stg.sparkColors.slice(0, 3).map((col, idx) => (
+                      <span
+                        key={idx}
+                        className="w-2.5 h-2.5 rounded-full inline-block"
+                        style={{ backgroundColor: col }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main 3D Canvas Highway */}
       <DrumHighwayCanvas
         notes={notes}
@@ -726,6 +786,7 @@ export function EdrumsHeroGame() {
         multiplier={currentMultiplier}
         lastFeedback={lastFeedback}
         speedMultiplier={playbackRate}
+        stageId={selectedStageId}
       />
 
       {/* Audio Playback & Song Selection Controls Bar */}
