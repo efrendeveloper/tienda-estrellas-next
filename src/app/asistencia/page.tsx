@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 type AlumnoRow = Pick<Database["public"]["Tables"]["alumnos"]["Row"], "id" | "nombre" | "created_at">;
 type AsistenciaRow = Database["public"]["Tables"]["asistencias"]["Row"];
-type AsistenciaEstado = "present" | "absent" | null;
+type AsistenciaEstado = "present" | "absent" | "justified" | null;
 
 type DiaClase = {
   dateIso: string;
@@ -131,18 +131,20 @@ export default function AsistenciaPage() {
     async (alumnoId: string, dateIso: string, estado: AsistenciaEstado) => {
       if (!supabase || !canEdit) return;
       const key = `${alumnoId}|${dateIso}`;
-      setSavingKey(key);
       const previous = asistenciaMap[key] ?? null;
+      // Si se presiona el mismo estado activo, se deselecciona
+      const nextEstado = previous === estado ? null : estado;
 
+      setSavingKey(key);
       setAsistenciaMap((prev) => ({
         ...prev,
-        [key]: estado,
+        [key]: nextEstado,
       }));
 
       const payload: Database["public"]["Tables"]["asistencias"]["Insert"] = {
         alumno_id: alumnoId,
         fecha: dateIso,
-        estado,
+        estado: nextEstado,
       };
 
       const { error } = await (supabase.from("asistencias") as any)
@@ -182,8 +184,8 @@ export default function AsistenciaPage() {
       </div>
 
       <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-2 text-[10px] text-white/80">
-        Mes actual: {MONTH_NAMES[selectedMonthNumber]} {selectedYear}. Click en <strong>P</strong> o{" "}
-        <strong>F</strong> para registrar presente o falta.
+        Mes actual: {MONTH_NAMES[selectedMonthNumber]} {selectedYear}. Click en <strong>P</strong> (presente),{" "}
+        <strong>F</strong> (falta) o <strong>J</strong> (falta justificada).
       </div>
 
       {loading ? (
@@ -197,7 +199,7 @@ export default function AsistenciaPage() {
                   Alumno
                 </th>
                 {diasClase.map((dia) => (
-                  <th key={dia.dateIso} className="min-w-[92px] border-b border-white/10 px-2 py-2 text-center">
+                  <th key={dia.dateIso} className="min-w-[110px] border-b border-white/10 px-2 py-2 text-center">
                     <span className="block">{dia.shortLabel}</span>
                     <span className="block text-[10px] text-white/55">{dia.fullLabel}</span>
                   </th>
@@ -222,9 +224,12 @@ export default function AsistenciaPage() {
                             type="button"
                             disabled={!canEdit || isSaving}
                             onClick={() => void setAsistencia(alumno.id, dia.dateIso, "present")}
-                            className={`rounded px-2 py-1 text-[10px] ${
-                              estado === "present" ? "bg-green-600 text-white" : "bg-white/10 text-white/80"
+                            className={`rounded px-2 py-1 text-[10px] font-medium transition-colors ${
+                              estado === "present"
+                                ? "bg-green-600 text-white shadow-sm"
+                                : "bg-white/10 text-white/80 hover:bg-white/20"
                             } disabled:opacity-50`}
+                            title="Asistencia (Presente)"
                           >
                             P
                           </button>
@@ -232,11 +237,27 @@ export default function AsistenciaPage() {
                             type="button"
                             disabled={!canEdit || isSaving}
                             onClick={() => void setAsistencia(alumno.id, dia.dateIso, "absent")}
-                            className={`rounded px-2 py-1 text-[10px] ${
-                              estado === "absent" ? "bg-red-600 text-white" : "bg-white/10 text-white/80"
+                            className={`rounded px-2 py-1 text-[10px] font-medium transition-colors ${
+                              estado === "absent"
+                                ? "bg-red-600 text-white shadow-sm"
+                                : "bg-white/10 text-white/80 hover:bg-white/20"
                             } disabled:opacity-50`}
+                            title="Falta"
                           >
                             F
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canEdit || isSaving}
+                            onClick={() => void setAsistencia(alumno.id, dia.dateIso, "justified")}
+                            className={`rounded px-2 py-1 text-[10px] font-semibold transition-colors ${
+                              estado === "justified"
+                                ? "bg-amber-500 text-black shadow-sm"
+                                : "bg-white/10 text-white/80 hover:bg-white/20"
+                            } disabled:opacity-50`}
+                            title="Falta justificada"
+                          >
+                            J
                           </button>
                         </div>
                       </td>

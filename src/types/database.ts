@@ -89,7 +89,7 @@ export interface Database {
           id: string;
           alumno_id: string;
           fecha: string;
-          estado: "present" | "absent" | null;
+          estado: "present" | "absent" | "justified" | null;
           created_at: string;
           updated_at: string;
         };
@@ -97,7 +97,7 @@ export interface Database {
           id?: string;
           alumno_id: string;
           fecha: string;
-          estado?: "present" | "absent" | null;
+          estado?: "present" | "absent" | "justified" | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -105,7 +105,7 @@ export interface Database {
           id?: string;
           alumno_id?: string;
           fecha?: string;
-          estado?: "present" | "absent" | null;
+          estado?: "present" | "absent" | "justified" | null;
           created_at?: string;
           updated_at?: string;
         };
