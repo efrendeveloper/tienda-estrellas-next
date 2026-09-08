@@ -540,9 +540,12 @@ export default function ShopEstrellasPage() {
 
       {!canEdit && (
         <div className="mx-4 md:mx-6 -mt-2 mb-2 rounded-lg border border-amber-400/40 bg-amber-500/15 px-3 py-2 text-[9px] sm:text-[10px] text-amber-100 leading-relaxed">
-          <strong className="text-amber-50">Solo lectura.</strong> Los padres y visitantes pueden ver
-          logros; para agregar alumnos, editar items o usar la ruleta, inicia sesion como{" "}
-          <strong>administrador</strong> o <strong>colaborador</strong>.
+          <strong className="text-amber-50">Modo Solo Lectura.</strong> Los alumnos y visitantes pueden ver
+          el tablero de logros y estrellas sin modificar nada. Si eres un alumno, puedes ingresar a la{" "}
+          <Link href="/tienda" className="underline font-bold text-yellow-300 hover:text-yellow-200">
+            Tienda
+          </Link>{" "}
+          para canjear tus propias monedas por recompensas.
         </div>
       )}
 

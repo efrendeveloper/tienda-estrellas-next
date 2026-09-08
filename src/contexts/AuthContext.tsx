@@ -13,21 +13,28 @@ import type { Session, User } from "@supabase/supabase-js";
 import { createSupabaseClient } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 
-type ProfileRoleRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "role">;
+type ProfileData = Pick<
+  Database["public"]["Tables"]["profiles"]["Row"],
+  "role" | "username" | "alumno_id"
+>;
 
-export type AppRole = "admin" | "collaborator" | "viewer";
+export type AppRole = "admin" | "collaborator" | "viewer" | "user";
 
 export type AuthContextValue = {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
-  /** Profesor (admin) o colaborador: pueden editar alumnos y comprar en la tienda. */
+  username: string | null;
+  alumnoId: string | null;
+  /** Profesor (admin) o colaborador: pueden editar alumnos y comprar en la tienda para cualquiera. */
   canEdit: boolean;
-  /** Solo administrador: eliminar alumnos (RLS también lo exige). */
+  /** Solo administrador: eliminar alumnos, gestión de usuarios (RLS también lo exige). */
   isAdmin: boolean;
+  /** Es un alumno logueado con rol 'user'. */
+  isUserStudent: boolean;
   /** Cargando sesión / perfil inicial */
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (identifier: string, password: string) => Promise<{ error: string | null }>;
   changePassword: (
     currentPassword: string,
     newPassword: string
@@ -38,7 +45,7 @@ export type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function normalizeRole(raw: string | null | undefined): AppRole {
-  if (raw === "admin" || raw === "collaborator" || raw === "viewer") return raw;
+  if (raw === "admin" || raw === "collaborator" || raw === "viewer" || raw === "user") return raw;
   return "viewer";
 }
 
@@ -67,27 +74,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [alumnoId, setAlumnoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   /** Evita setState tras desmontar (Strict Mode / navegación) — reduce AbortError en cadena con fetch. */
   const mountedRef = useRef(true);
 
   const supabase = createSupabaseClient();
 
-  const fetchRole = useCallback(
-    async (uid: string): Promise<AppRole> => {
-      if (!supabase) return "viewer";
+  const fetchProfile = useCallback(
+    async (uid: string): Promise<{ role: AppRole; username: string | null; alumno_id: string | null }> => {
+      if (!supabase) return { role: "viewer", username: null, alumno_id: null };
       try {
         const { data, error } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, username, alumno_id")
           .eq("id", uid)
           .maybeSingle();
-        if (error || !data) return "viewer";
-        const row = data as ProfileRoleRow;
-        return normalizeRole(row.role);
+        if (error || !data) return { role: "viewer", username: null, alumno_id: null };
+        const row = data as ProfileData;
+        return {
+          role: normalizeRole(row.role),
+          username: row.username ?? null,
+          alumno_id: row.alumno_id ?? null,
+        };
       } catch (e) {
-        if (!isAbortLike(e)) console.warn("fetchRole:", e);
-        return "viewer";
+        if (!isAbortLike(e)) console.warn("fetchProfile:", e);
+        return { role: "viewer", username: null, alumno_id: null };
       }
     },
     [supabase]
@@ -124,11 +137,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        const r = await fetchRole(s.user.id);
+        const prof = await fetchProfile(s.user.id);
         if (!mountedRef.current) return;
-        setRole(r);
+        setRole(prof.role);
+        setUsername(prof.username);
+        setAlumnoId(prof.alumno_id);
       } else {
         setRole(null);
+        setUsername(null);
+        setAlumnoId(null);
       }
       if (mountedRef.current) setLoading(false);
     })();
@@ -142,11 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void (async () => {
         if (!mountedRef.current) return;
         if (s?.user) {
-          const r = await fetchRole(s.user.id);
+          const prof = await fetchProfile(s.user.id);
           if (!mountedRef.current) return;
-          setRole(r);
+          setRole(prof.role);
+          setUsername(prof.username);
+          setAlumnoId(prof.alumno_id);
         } else {
           setRole(null);
+          setUsername(null);
+          setAlumnoId(null);
         }
       })();
     });
@@ -155,19 +176,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mountedRef.current = false;
       subscription.unsubscribe();
     };
-  }, [supabase, fetchRole]);
+  }, [supabase, fetchProfile]);
 
   const canEdit = role === "admin" || role === "collaborator";
   const isAdmin = role === "admin";
+  const isUserStudent = role === "user";
 
   const signIn = useCallback(
-    async (email: string, password: string) => {
+    async (identifier: string, password: string) => {
       if (!supabase) return { error: "Supabase no configurado" };
+      const raw = identifier.trim();
+      if (!raw) return { error: "Introduce un usuario o correo" };
+
+      let targetEmail = raw;
+
+      // Si no contiene '@', buscamos en profiles por username o generamos email sintético
+      if (!raw.includes("@")) {
+        try {
+          const { data } = await supabase
+            .from("profiles")
+            .select("email, username")
+            .ilike("username", raw)
+            .maybeSingle();
+
+          if (data && (data as { email?: string | null }).email) {
+            targetEmail = (data as { email: string }).email;
+          } else {
+            // Intentar con el dominio local predeterminado para usuarios
+            targetEmail = `${raw.toLowerCase()}@academia.efrendrums.local`;
+          }
+        } catch {
+          targetEmail = `${raw.toLowerCase()}@academia.efrendrums.local`;
+        }
+      }
+
       try {
         const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: targetEmail,
           password,
         });
+
+        // Si falló y no tenía @, intentar alternativamente como email directo por si acaso
+        if (error && !raw.includes("@") && targetEmail !== `${raw.toLowerCase()}@academia.efrendrums.local`) {
+          const fallback = await supabase.auth.signInWithPassword({
+            email: `${raw.toLowerCase()}@academia.efrendrums.local`,
+            password,
+          });
+          if (!fallback.error) return { error: null };
+        }
+
         return { error: error?.message ?? null };
       } catch (e: unknown) {
         if (!isAbortLike(e)) console.warn("signIn error:", e);
@@ -248,14 +305,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       session,
       role,
+      username,
+      alumnoId,
       canEdit,
       isAdmin,
+      isUserStudent,
       loading,
       signIn,
       changePassword,
       signOut,
     }),
-    [user, session, role, canEdit, isAdmin, loading, signIn, changePassword, signOut]
+    [
+      user,
+      session,
+      role,
+      username,
+      alumnoId,
+      canEdit,
+      isAdmin,
+      isUserStudent,
+      loading,
+      signIn,
+      changePassword,
+      signOut,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

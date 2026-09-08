@@ -17,7 +17,7 @@ const NAV = [
 
 export function AppTopBar() {
   const pathname = usePathname();
-  const { user, canEdit, loading } = useAuth();
+  const { user, canEdit, isAdmin, loading } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
 
   if (loading) return null;
@@ -32,6 +32,7 @@ export function AppTopBar() {
   const navItems = [
     ...NAV,
     ...(canEdit ? [{ href: "/edrums-hero", label: "Edrums-hero" }] : []),
+    ...(isAdmin ? [{ href: "/usuarios", label: "Usuarios" }] : []),
   ];
 
   return (

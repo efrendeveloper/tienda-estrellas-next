@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function AuthMenu() {
   const router = useRouter();
-  const { user, role, loading, signIn, changePassword, signOut } = useAuth();
+  const { user, role, username, isAdmin, loading, signIn, changePassword, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -77,12 +77,14 @@ export function AuthMenu() {
 
   const roleLabel =
     role === "admin"
-      ? "Administrador"
+      ? "Administrador (Profesor)"
       : role === "collaborator"
         ? "Colaborador"
-        : role === "viewer"
-          ? "Solo lectura"
-          : null;
+        : role === "user"
+          ? "Alumno"
+          : role === "viewer"
+            ? "Solo lectura"
+            : null;
 
   return (
     <div className="relative flex items-center gap-2 text-[10px] sm:text-xs font-sans">
@@ -104,19 +106,49 @@ export function AuthMenu() {
           </button>
 
           {userMenuOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/15 bg-[#1a1a1a] p-2 shadow-2xl">
+            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/15 bg-[#1a1a1a] p-2 shadow-2xl z-[6000]">
               <div className="mb-2 rounded-lg bg-white/5 px-3 py-2">
-                <p className="truncate text-[10px] text-white/90" title={user.email ?? ""}>
-                  {user.email}
+                <p className="truncate text-[10px] text-white/90 font-medium" title={user.email ?? ""}>
+                  {username ? `@${username}` : user.email}
                 </p>
-                {roleLabel && <p className="mt-1 text-[10px] text-red-300">{roleLabel}</p>}
+                {roleLabel && (
+                  <p
+                    className={`mt-1 text-[10px] font-semibold ${
+                      role === "admin"
+                        ? "text-red-400"
+                        : role === "collaborator"
+                          ? "text-blue-300"
+                          : role === "user"
+                            ? "text-emerald-300"
+                            : "text-white/70"
+                    }`}
+                  >
+                    {roleLabel}
+                  </p>
+                )}
               </div>
+              {isAdmin && (
+                <Link
+                  href="/usuarios"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="mb-1 block w-full rounded-md bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-left text-[10px] font-semibold text-amber-200 hover:bg-amber-500/30 transition-colors"
+                >
+                  ⚙️ Gestión de Usuarios
+                </Link>
+              )}
               <Link
                 href="/shop_estrellas"
                 onClick={() => setUserMenuOpen(false)}
                 className="mb-1 block w-full rounded-md bg-red-600 px-3 py-2 text-left text-[10px] font-semibold text-white hover:bg-red-700 transition-colors"
               >
                 Shop Estrellas
+              </Link>
+              <Link
+                href="/tienda"
+                onClick={() => setUserMenuOpen(false)}
+                className="mb-1 block w-full rounded-md bg-white/10 px-3 py-2 text-left text-[10px] text-white hover:bg-white/20 transition-colors"
+              >
+                Tienda de Recompensas
               </Link>
               <button
                 type="button"
@@ -172,18 +204,18 @@ export function AuthMenu() {
               Iniciar sesión
             </h2>
             <p className="mb-4 text-[10px] leading-relaxed text-white/70">
-              Cuenta del profesor o colaborador. Los padres pueden ver la app sin iniciar sesión.
+              Inicia sesión con tu <strong>Nombre de Usuario</strong> o Correo y tu Contraseña (para alumnos, colaboradores y profesores).
             </p>
             <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-[10px] text-white/90">
-                Correo
+                Usuario o Correo
                 <input
-                  type="email"
-                  autoComplete="email"
+                  type="text"
+                  autoComplete="username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="rounded-lg border-0 bg-white/10 px-3 py-2 text-xs text-white placeholder-white/40"
-                  placeholder="profesor@ejemplo.com"
+                  placeholder="ej. carlos_drum o correo@ejemplo.com"
                   required
                 />
               </label>

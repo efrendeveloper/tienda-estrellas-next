@@ -7,22 +7,36 @@ export interface Database {
         Row: {
           id: string;
           email: string | null;
-          role: "admin" | "collaborator" | "viewer";
+          username: string | null;
+          role: "admin" | "collaborator" | "viewer" | "user";
+          alumno_id: string | null;
           updated_at: string;
         };
         Insert: {
           id: string;
           email?: string | null;
-          role?: "admin" | "collaborator" | "viewer";
+          username?: string | null;
+          role?: "admin" | "collaborator" | "viewer" | "user";
+          alumno_id?: string | null;
           updated_at?: string;
         };
         Update: {
           id?: string;
           email?: string | null;
-          role?: "admin" | "collaborator" | "viewer";
+          username?: string | null;
+          role?: "admin" | "collaborator" | "viewer" | "user";
+          alumno_id?: string | null;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "profiles_alumno_id_fkey";
+            columns: ["alumno_id"];
+            isOneToOne: false;
+            referencedRelation: "alumnos";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       alumnos: {
         Row: {
