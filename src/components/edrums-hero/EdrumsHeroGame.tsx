@@ -12,10 +12,18 @@ import {
   STAGES,
 } from "./types";
 import { DrumHighwayCanvas } from "./DrumHighwayCanvas";
-import { midiManager, MidiDevice } from "./midiManager";
+import { midiManager, MidiDevice, RawMidiEvent } from "./midiManager";
+import { drumSoundEngine } from "./drumSoundEngine";
 import { SAMPLE_PRESETS, generateSampleSynthAudio } from "./sampleBeats";
 import { createSupabaseClient } from "@/lib/supabase";
 import type { Alumno } from "@/types";
+
+function getMidiNoteName(note: number): string {
+  const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const octave = Math.floor(note / 12) - 1;
+  const name = noteNames[note % 12];
+  return `${name}${octave}`;
+}
 
 export function EdrumsHeroGame() {
   // Mode: "play" | "map"
@@ -77,6 +85,24 @@ export function EdrumsHeroGame() {
   const [midiMapping, setMidiMapping] = useState<MidiMapping>(DEFAULT_MIDI_MAPPING);
   const [midiModalOpen, setMidiModalOpen] = useState(false);
   const [learningLane, setLearningLane] = useState<DrumInstrumentId | null>(null);
+  const [rawMidiEvent, setRawMidiEvent] = useState<RawMidiEvent | null>(null);
+  const [midiSignalBlink, setMidiSignalBlink] = useState(false);
+  const [learnSuccessLane, setLearnSuccessLane] = useState<{
+    laneId: DrumInstrumentId;
+    note: number;
+  } | null>(null);
+
+  // Refs for zero-latency event listener synchronization without stale closures
+  const learningLaneRef = useRef<DrumInstrumentId | null>(null);
+  const midiMappingRef = useRef<MidiMapping>(midiMapping);
+
+  useEffect(() => {
+    learningLaneRef.current = learningLane;
+  }, [learningLane]);
+
+  useEffect(() => {
+    midiMappingRef.current = midiMapping;
+  }, [midiMapping]);
 
   // Game Summary Modal
   const [showSummary, setShowSummary] = useState(false);
@@ -242,19 +268,24 @@ export function EdrumsHeroGame() {
     };
   }, [activeChart]);
 
-  // Initialize Web MIDI
-  useEffect(() => {
-    void (async () => {
-      const res = await midiManager.initialize();
-      setMidiSupported(res.supported);
-      setMidiDevices(res.devices);
-      setMidiMapping(midiManager.getMapping());
-    })();
+  const refreshMidiDevices = useCallback(async () => {
+    const res = await midiManager.initialize();
+    setMidiSupported(res.supported);
+    setMidiDevices(res.devices);
+    setMidiMapping(midiManager.getMapping());
   }, []);
 
-  // Handle Drum Hit (Keyboard or MIDI)
+  // Initialize Web MIDI on mount
+  useEffect(() => {
+    void refreshMidiDevices();
+  }, [refreshMidiDevices]);
+
+  // Handle Drum Hit (Keyboard, Click or MIDI)
   const triggerDrumHit = useCallback(
-    (laneId: DrumInstrumentId) => {
+    (laneId: DrumInstrumentId, velocity: number = 100) => {
+      // Play instant zero-latency synthesized drum hit
+      drumSoundEngine.playSound(laneId, velocity);
+
       const hitTime = Date.now();
       setActiveHits((prev) => ({ ...prev, [laneId]: hitTime }));
 
@@ -344,7 +375,7 @@ export function EdrumsHeroGame() {
       const matchedLane = DEFAULT_DRUM_LANES.find((l) => l.key === key);
       if (matchedLane) {
         e.preventDefault();
-        triggerDrumHit(matchedLane.id);
+        triggerDrumHit(matchedLane.id, 100);
       }
     };
 
@@ -352,30 +383,62 @@ export function EdrumsHeroGame() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [triggerDrumHit]);
 
-  // Web MIDI Listener
+  // Web MIDI Listeners (Note strikes, live raw telemetry & device hot-plugging)
   useEffect(() => {
     const handleMidiNote = (
       noteNumber: number,
-      _velocity: number,
+      velocity: number,
       laneId?: DrumInstrumentId
     ) => {
-      // If currently learning a MIDI note for a specific lane:
-      if (learningLane) {
-        const newMap = { ...midiMapping, [learningLane]: noteNumber };
+      // If currently learning/mapping a pad:
+      const targetLane = learningLaneRef.current;
+      if (targetLane) {
+        const newMap = { ...midiMappingRef.current, [targetLane]: noteNumber };
         setMidiMapping(newMap);
         midiManager.setMapping(newMap);
+        learningLaneRef.current = null;
         setLearningLane(null);
+
+        // Instantly play audio of the mapped drum pad
+        drumSoundEngine.playSound(targetLane, velocity);
+        triggerDrumHit(targetLane, velocity);
+
+        // Trigger visual success highlight for this pad
+        setLearnSuccessLane({ laneId: targetLane, note: noteNumber });
+        setTimeout(() => setLearnSuccessLane(null), 3000);
         return;
       }
 
+      // Normal gameplay or practice hit
       if (laneId) {
-        triggerDrumHit(laneId);
+        triggerDrumHit(laneId, velocity);
+      } else {
+        // Struck an unmapped note: play audio blip so user hears confirmation that signal reached the PC
+        drumSoundEngine.playSound("unmapped", velocity);
       }
     };
 
+    const handleRawMidi = (event: RawMidiEvent) => {
+      setRawMidiEvent(event);
+      setMidiSignalBlink(true);
+      setTimeout(() => setMidiSignalBlink(false), 200);
+    };
+
+    const handleDeviceChange = (devices: MidiDevice[]) => {
+      setMidiDevices(devices);
+      setMidiSupported(devices.length > 0 || true);
+    };
+
     midiManager.addListener(handleMidiNote);
-    return () => midiManager.removeListener(handleMidiNote);
-  }, [learningLane, midiMapping, triggerDrumHit]);
+    midiManager.addRawListener(handleRawMidi);
+    midiManager.addDeviceListener(handleDeviceChange);
+
+    return () => {
+      midiManager.removeListener(handleMidiNote);
+      midiManager.removeRawListener(handleRawMidi);
+      midiManager.removeDeviceListener(handleDeviceChange);
+    };
+  }, [triggerDrumHit]);
 
   // Check Missed Notes during Play mode
   useEffect(() => {
@@ -595,7 +658,10 @@ export function EdrumsHeroGame() {
           {/* MIDI Settings Button */}
           <button
             type="button"
-            onClick={() => setMidiModalOpen(true)}
+            onClick={() => {
+              void refreshMidiDevices();
+              setMidiModalOpen(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60 text-xs font-semibold transition-all"
           >
             🥁 Batería MIDI {midiSupported ? "🟢" : "⚪"}
@@ -977,25 +1043,34 @@ export function EdrumsHeroGame() {
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Status */}
-              <div className="p-3 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between">
+              {/* Status & Reconnect action */}
+              <div className="p-3 rounded-xl bg-black/50 border border-white/10 flex items-center justify-between gap-3">
                 <div>
-                  <span className="font-bold text-gray-200">Estado de Web MIDI:</span>
-                  <p className="text-gray-400 mt-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-200">Estado de Web MIDI:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        midiSupported
+                          ? "bg-green-500/20 text-green-300 border border-green-500/40"
+                          : "bg-red-500/20 text-red-300 border border-red-500/40"
+                      }`}
+                    >
+                      {midiSupported ? "DISPONIBLE" : "NO DISPONIBLE"}
+                    </span>
+                  </div>
+                  <p className="text-gray-400 text-[11px] mt-0.5">
                     {midiSupported
-                      ? "API Web MIDI activa en tu navegador"
-                      : "API no detectada o no soportada en este navegador"}
+                      ? `${midiDevices.length} dispositivo(s) detectado(s)`
+                      : "API no detectada o permisos no concedidos"}
                   </p>
                 </div>
-                <span
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                    midiSupported
-                      ? "bg-green-500/20 text-green-300 border border-green-500/40"
-                      : "bg-red-500/20 text-red-300 border border-red-500/40"
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => void refreshMidiDevices()}
+                  className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-black font-bold text-xs shadow-md transition-all flex items-center gap-1 shrink-0"
                 >
-                  {midiSupported ? "CONECTADO" : "NO DISPONIBLE"}
-                </span>
+                  🔄 Buscar / Reconectar
+                </button>
               </div>
 
               {/* Connected Devices */}
@@ -1006,54 +1081,166 @@ export function EdrumsHeroGame() {
                     {midiDevices.map((dev) => (
                       <li
                         key={dev.id}
-                        className="p-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-200"
+                        className="p-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-200 flex items-center justify-between"
                       >
-                        🎵 {dev.name} ({dev.manufacturer})
+                        <span className="font-semibold">🎵 {dev.name}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          {dev.manufacturer}
+                        </span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="p-3 rounded-lg bg-gray-900 text-gray-400 italic">
-                    Conecta tu batería electrónica por USB/MIDI. Si acabas de conectarla, cierra
-                    y vuelve a abrir esta ventana.
+                  <div className="p-3 rounded-lg bg-gray-900/80 border border-white/5 text-gray-400">
+                    <p className="text-[11px]">
+                      ⚠️ No se detectó ninguna batería conectada. Conecta tu módulo por cable USB y haz clic en{" "}
+                      <strong className="text-cyan-300">"Buscar / Reconectar"</strong>. Si tu navegador solicita permisos MIDI, selecciona <strong>"Permitir"</strong>.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* LIVE MIDI SIGNAL MONITOR */}
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-cyan-500/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-200 flex items-center gap-2">
+                    📡 Monitor de Señal MIDI en Vivo:
+                    <span
+                      className={`inline-block w-2.5 h-2.5 rounded-full transition-all duration-150 ${
+                        midiSignalBlink
+                          ? "bg-green-400 shadow-[0_0_12px_#22c55e] scale-125"
+                          : "bg-gray-600"
+                      }`}
+                    />
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {midiSignalBlink ? "⚡ ¡SEÑAL DETECTADA!" : "ESPERANDO GOLPE..."}
+                  </span>
+                </div>
+
+                {rawMidiEvent ? (
+                  <div className="bg-black/60 p-2.5 rounded-lg border border-white/10 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-400/50 text-cyan-300 font-mono font-bold">
+                        Nota: {rawMidiEvent.noteNumber} ({getMidiNoteName(rawMidiEvent.noteNumber)})
+                      </span>
+                      <span className="text-gray-300 font-mono">
+                        Vel: {rawMidiEvent.velocity}
+                      </span>
+                      <span className="text-gray-400 font-mono">
+                        Ch: {rawMidiEvent.channel}
+                      </span>
+                    </div>
+
+                    <div>
+                      {rawMidiEvent.laneId ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-extrabold text-[10px]">
+                          PAD: {rawMidiEvent.laneId.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/50 text-amber-300 font-semibold text-[10px]">
+                          Nota sin asignar
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">
+                    💡 Golpea cualquier pad o bombo de tu batería electrónica para verificar que la señal llega a tu computadora.
                   </p>
                 )}
               </div>
 
               {/* MIDI Mapping Learn Table */}
               <div>
-                <h4 className="font-bold text-gray-300 mb-2">Mapeo de Pads (MIDI Learn):</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-gray-300">Mapeo de Pads (MIDI Learn):</h4>
+                  {learningLane && (
+                    <span className="text-[10px] text-amber-400 font-bold animate-pulse">
+                      🔴 MODO APRENDIZAJE ACTIVO
+                    </span>
+                  )}
+                </div>
+
+                {learningLane && (
+                  <div className="mb-2 p-2.5 rounded-xl bg-amber-950/80 border border-amber-500/60 text-amber-200 flex items-center justify-between text-[11px]">
+                    <span>
+                      🎯 Golpea ahora el pad correspondiente a{" "}
+                      <strong className="text-white underline">
+                        {DEFAULT_DRUM_LANES.find((l) => l.id === learningLane)?.name}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLearningLane(null)}
+                      className="px-2 py-0.5 rounded bg-black/50 hover:bg-black/80 text-[10px] text-gray-300"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+
                 <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                   {DEFAULT_DRUM_LANES.map((lane) => {
                     const isLearning = learningLane === lane.id;
+                    const isRecentlyHit = Date.now() - (activeHits[lane.id] || 0) < 300;
+                    const isJustLearned = learnSuccessLane?.laneId === lane.id;
+
                     return (
                       <div
                         key={lane.id}
-                        className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/10"
+                        className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+                          isRecentlyHit
+                            ? "bg-white/15 border-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.5)]"
+                            : isJustLearned
+                            ? "bg-emerald-950/60 border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.4)]"
+                            : "bg-black/40 border-white/10"
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <span
-                            className="w-3 h-3 rounded-full"
+                            className="w-3 h-3 rounded-full shrink-0"
                             style={{ backgroundColor: lane.color }}
                           />
                           <span className="font-bold text-gray-200">{lane.name}</span>
                           <span className="text-gray-400">[{lane.key.toUpperCase()}]</span>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-cyan-300">
-                            Nota: {midiMapping[lane.id]}
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-cyan-300 text-[11px]">
+                            Nota: {midiMapping[lane.id]} ({getMidiNoteName(midiMapping[lane.id])})
                           </span>
+
+                          {/* Sound test button */}
+                          <button
+                            type="button"
+                            title="Probar sonido de este pad"
+                            onClick={() => {
+                              drumSoundEngine.playSound(lane.id);
+                              triggerDrumHit(lane.id);
+                            }}
+                            className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-[10px] font-semibold transition-all"
+                          >
+                            🔊 Probar
+                          </button>
+
+                          {/* Map learn button */}
                           <button
                             type="button"
                             onClick={() => setLearningLane(isLearning ? null : lane.id)}
                             className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
                               isLearning
-                                ? "bg-amber-500 text-black animate-pulse"
+                                ? "bg-amber-500 text-black animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.8)]"
+                                : isJustLearned
+                                ? "bg-emerald-500 text-black"
                                 : "bg-cyan-600 hover:bg-cyan-500 text-black"
                             }`}
                           >
-                            {isLearning ? "¡Golpea tu pad ahora!" : "Mapear"}
+                            {isLearning
+                              ? "🔴 ¡Golpea tu pad!"
+                              : isJustLearned
+                              ? `✅ ¡Nota ${learnSuccessLane.note}!`
+                              : "🎯 Mapear"}
                           </button>
                         </div>
                       </div>
