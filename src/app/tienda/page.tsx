@@ -17,7 +17,7 @@ export default function TiendaPage() {
   const [comprandoId, setComprandoId] = useState<string | null>(null);
   const coinAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { user, role, canEdit, isUserStudent, alumnoId } = useAuth();
+  const { user, role, canEdit, isUserStudent, isViewer, alumnoId } = useAuth();
   const supabase = createSupabaseClient();
 
   const fetchAlumnos = useCallback(async () => {
@@ -59,21 +59,38 @@ export default function TiendaPage() {
     fetchAlumnos().finally(() => setLoading(false));
   }, [fetchAlumnos]);
 
-  // Si es alumno logueado, fijar automáticamente su alumno vinculado
+  // Es alumno o viewer vinculado
+  const isStudentOrViewer = isViewer || isUserStudent || role === "viewer" || role === "user";
+
+  // Identificar el alumno vinculado (por alumnoId del perfil o fallback por username/email)
+  const linkedAlumnoId = alumnoId || (
+    isStudentOrViewer && user?.email && alumnos.length > 0
+      ? (alumnos.find((a) => {
+          const prefix = (user.email ?? "").split("@")[0].toLowerCase().trim();
+          return a.nombre.toLowerCase().trim() === prefix;
+        })?.id ?? null)
+      : null
+  );
+
+  // Si el usuario es un viewer o alumno con alumno vinculado, fijar automáticamente su selección
+  const hasLockedStudent = isStudentOrViewer && !!linkedAlumnoId && !canEdit;
+
   useEffect(() => {
-    if (isUserStudent && alumnoId) {
-      setSelectedId(alumnoId);
+    if (hasLockedStudent && linkedAlumnoId) {
+      setSelectedId(linkedAlumnoId);
     }
-  }, [isUserStudent, alumnoId]);
+  }, [hasLockedStudent, linkedAlumnoId]);
 
-  // Alumno activo según selección o vinculación
-  const currentAlumno = alumnos.find((x) => x.id === (isUserStudent ? alumnoId : selectedId));
+  // Alumno activo para compras y visualización
+  const effectiveAlumnoId = hasLockedStudent && linkedAlumnoId ? linkedAlumnoId : selectedId;
+  const currentAlumno = alumnos.find((x) => x.id === effectiveAlumnoId);
 
-  const puedeComprar = canEdit || (isUserStudent && !!alumnoId && currentAlumno !== undefined);
+  // Puede comprar si es admin/colaborador, o si es viewer/alumno con alumno vinculado
+  const puedeComprar = canEdit || (hasLockedStudent && currentAlumno !== undefined);
 
   const comprar = useCallback(
     async (item: (typeof SHOP_ITEMS)[0]) => {
-      const targetId = isUserStudent ? alumnoId : selectedId;
+      const targetId = effectiveAlumnoId;
 
       if (!targetId) {
         alert("Por favor, selecciona un alumno para realizar la compra.");
@@ -103,7 +120,7 @@ export default function TiendaPage() {
             itemId: item.id,
             userId: user?.id,
             userRole: role,
-            userAlumnoId: alumnoId,
+            userAlumnoId: linkedAlumnoId || targetId,
           }),
         });
 
@@ -140,7 +157,7 @@ export default function TiendaPage() {
         setComprandoId(null);
       }
     },
-    [isUserStudent, alumnoId, selectedId, alumnos, user?.id, role, fetchAlumnos]
+    [effectiveAlumnoId, alumnos, user?.id, role, linkedAlumnoId, fetchAlumnos]
   );
 
   if (!supabase) {
@@ -183,45 +200,74 @@ export default function TiendaPage() {
         </div>
       </header>
 
-      {/* Aviso para visitantes no autenticados o solo lectura */}
-      {!canEdit && !isUserStudent && (
-        <div className="mb-6 mx-auto max-w-4xl rounded-xl border border-amber-400/40 bg-black/40 px-4 py-3 text-xs text-amber-100 leading-relaxed text-center backdrop-blur">
-          <strong className="text-amber-300">Modo Solo Lectura:</strong> Puedes explorar los precios de los ítems. Para canjear recompensas con tus monedas, inicia sesión con tu <strong>Usuario y Contraseña</strong> de alumno.
+      {/* Aviso para visitantes no autenticados */}
+      {!user && (
+        <div className="mb-6 mx-auto max-w-4xl rounded-xl border border-amber-400/40 bg-black/40 px-4 py-3 text-xs text-amber-100 leading-relaxed text-center backdrop-blur shadow-lg">
+          <strong className="text-amber-300">Modo Solo Lectura:</strong> Puedes explorar los precios de los ítems. Para canjear recompensas con tus monedas, inicia sesión con tu cuenta de alumno.
         </div>
       )}
 
-      {/* Si es rol Alumno pero no tiene alumno vinculado */}
-      {isUserStudent && !alumnoId && (
-        <div className="mb-6 mx-auto max-w-4xl rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-200 leading-relaxed text-center backdrop-blur">
-          <strong>Cuenta de Alumno sin vincular:</strong> Tu usuario aún no tiene un alumno asignado. Pídele al profesor que vincule tu cuenta en la sección de Administrador para ver tus monedas.
+      {/* Si es rol Alumno o Viewer pero aún no tiene alumno vinculado en su cuenta */}
+      {isStudentOrViewer && !linkedAlumnoId && !canEdit && (
+        <div className="mb-6 mx-auto max-w-4xl rounded-xl border border-amber-500/40 bg-red-950/40 px-4 py-3 text-xs text-amber-200 leading-relaxed text-center backdrop-blur shadow-lg">
+          ⚠️ <strong>Cuenta sin alumno vinculado:</strong> Tu usuario aún no tiene un alumno asignado en el sistema. Pídele al profesor que vincule tu cuenta en el Panel de Administrador para ver tus monedas y habilitar tus compras.
+        </div>
+      )}
+
+      {/* Saludo informativo para alumno o viewer con cuenta vinculada */}
+      {hasLockedStudent && currentAlumno && (
+        <div className="mb-6 mx-auto max-w-4xl rounded-xl border border-yellow-400/40 bg-black/50 px-4 py-3 text-xs text-yellow-100 leading-relaxed text-center backdrop-blur shadow-lg flex items-center justify-center gap-2">
+          <span className="text-base">🎉</span>
+          <span>
+            ¡Bienvenido/a, <strong className="text-yellow-300 font-bold">{currentAlumno.nombre}</strong>! Tienes{" "}
+            <strong className="text-yellow-300 font-bold">{currentAlumno.monedas} monedas</strong> disponibles para canjear en la tienda.
+          </span>
         </div>
       )}
 
       <div className="max-w-5xl mx-auto text-center">
-        {/* Caso 1: Alumno Logueado (Rol User) -> Solo se muestran sus monedas */}
-        {isUserStudent && currentAlumno ? (
-          <div className="mb-6 inline-flex flex-col sm:flex-row items-center gap-4 bg-black/50 border border-yellow-400/60 rounded-2xl px-6 py-4 shadow-2xl backdrop-blur">
-            <div className="h-12 w-12 rounded-full bg-yellow-400/20 border border-yellow-400/50 flex items-center justify-center text-2xl shadow-inner">
-              🥁
+        {/* Caso 1: Alumno o Viewer con alumno vinculado -> Checklist bloqueado exclusivamente para su cuenta */}
+        {hasLockedStudent && currentAlumno ? (
+          <div className="mb-6 inline-flex flex-wrap items-center justify-center gap-3 bg-black/50 border border-yellow-400/60 rounded-2xl px-5 py-3.5 shadow-2xl backdrop-blur">
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-yellow-400/20 border border-yellow-400/50 px-2.5 py-0.5 text-[10px] font-bold text-yellow-300 uppercase tracking-wider flex items-center gap-1">
+                🔒 Alumno Vinculado
+              </span>
+              <label className="text-xs sm:text-sm font-semibold text-white/90">Alumno:</label>
             </div>
-            <div className="text-center sm:text-left">
-              <div className="text-xs uppercase tracking-wider text-yellow-300 font-semibold">
-                Alumno Conectado: {currentAlumno.nombre}
+
+            <div className="relative inline-block">
+              <select
+                value={currentAlumno.id}
+                disabled
+                aria-label="Alumno vinculado"
+                title="Cuenta vinculada exclusivamente a este alumno. No se puede seleccionar otro."
+                className="px-3 py-2 rounded-lg border border-yellow-400/60 bg-white text-black text-xs sm:text-sm font-bold cursor-not-allowed opacity-95 shadow-md pr-8 appearance-none"
+              >
+                <option value={currentAlumno.id}>
+                  {currentAlumno.nombre} (💰 {currentAlumno.monedas} monedas)
+                </option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-black/70 font-bold text-xs">
+                🔒
               </div>
-              <div className="text-xl sm:text-2xl font-black text-yellow-300 flex items-center justify-center sm:justify-start gap-2">
-                <span>💰 {currentAlumno.monedas}</span>
-                <span className="text-xs font-normal text-white/90">monedas disponibles</span>
-              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-yellow-400/20 border border-yellow-400/40 rounded-xl px-3 py-1.5 shadow-inner">
+              <span className="text-xs text-white/90">Saldo disponible:</span>
+              <span className="text-sm font-black text-yellow-300">
+                💰 {currentAlumno.monedas} monedas
+              </span>
             </div>
           </div>
         ) : (
-          /* Caso 2: Profesor / Colaborador / Visitante -> Selector de alumnos */
-          <div className="mb-6 inline-block bg-black/40 border border-white/20 rounded-xl px-4 py-3">
+          /* Caso 2: Profesor / Colaborador / Visitante -> Checklist interactivo para seleccionar alumno */
+          <div className="mb-6 inline-block bg-black/40 border border-white/20 rounded-xl px-4 py-3 backdrop-blur">
             <label className="mr-2 text-xs sm:text-sm font-medium">Alumno:</label>
             <select
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="px-3 py-2 rounded-lg border-0 bg-white text-black text-xs sm:text-sm font-medium focus:outline-none"
+              className="px-3 py-2 rounded-lg border-0 bg-white text-black text-xs sm:text-sm font-medium focus:outline-none shadow"
             >
               <option value="">-- Selecciona un alumno --</option>
               {alumnos.map((a) => (

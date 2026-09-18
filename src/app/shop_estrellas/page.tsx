@@ -93,6 +93,9 @@ export default function ShopEstrellasPage() {
   const coinAudioRef = useRef<HTMLAudioElement | null>(null);
   const chargeAudioRef = useRef<HTMLAudioElement | null>(null);
   const powStartAudioRef = useRef<HTMLAudioElement | null>(null);
+  const holdCompletedTimestampRef = useRef<number>(0);
+  const holdDurationRef = useRef<number>(0);
+  const chargeAudioPlayingRef = useRef<boolean>(false);
 
   const { canEdit, isAdmin } = useAuth();
   const supabase = createSupabaseClient();
@@ -451,10 +454,18 @@ export default function ShopEstrellasPage() {
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, index: number, key: string) => {
       const wantsRoulette =
-        (key === "item_box" || key === "cube_yellow" || key === "cerezas") && e.button === 0;
+        (key === "item_box" || key === "cube_yellow") && e.button === 0;
+      const wantsCerezas = key === "cerezas" && e.button === 2;
       const wantsPow = key === "pow" && e.button === 2;
-      if (!canEdit || powGameRunning || rollingRef.current || (!wantsRoulette && !wantsPow)) return;
-      if (wantsPow) e.preventDefault();
+      if (
+        !canEdit ||
+        powGameRunning ||
+        rollingRef.current ||
+        (!wantsRoulette && !wantsPow && !wantsCerezas)
+      ) {
+        return;
+      }
+      if (wantsPow || wantsCerezas) e.preventDefault();
       const state = holdState.current;
       if (state.timerActive) return;
       state.timerActive = true;
@@ -462,12 +473,33 @@ export default function ShopEstrellasPage() {
       state.index = index;
       state.key = key;
       state.action = wantsPow ? "pow" : "roulette";
-      playCharge(true);
+      holdDurationRef.current = 0;
+      chargeAudioPlayingRef.current = false;
+
       const ringEl = (e.target as HTMLElement).closest(".item-box")?.querySelector(".ring");
-      if (ringEl) ringEl.classList.remove("hidden");
+
+      if (!wantsCerezas) {
+        playCharge(true);
+        chargeAudioPlayingRef.current = true;
+        if (ringEl) ringEl.classList.remove("hidden");
+      }
 
       function step(now: number) {
         const elapsed = now - state.startTime;
+
+        // Para cerezas, si apenas está comenzando el clic (< 250ms), no mostramos animación ni audio todavía
+        if (state.key === "cerezas" && elapsed < 250) {
+          state.rafId = requestAnimationFrame(step);
+          return;
+        }
+
+        // Si es cerezas y ya superó los 250ms (se dejó presionado), activamos audio y anillo
+        if (state.key === "cerezas" && !chargeAudioPlayingRef.current) {
+          chargeAudioPlayingRef.current = true;
+          playCharge(true);
+          if (ringEl) ringEl.classList.remove("hidden");
+        }
+
         const progress = Math.min(1, elapsed / HOLD_TIME_MS);
         if (ringEl) {
           const circle = ringEl.querySelector(".circle") as HTMLElement;
@@ -480,7 +512,10 @@ export default function ShopEstrellasPage() {
         if (progress >= 1) {
           cancelAnimationFrame(state.rafId!);
           state.timerActive = false;
+          chargeAudioPlayingRef.current = false;
           playCharge(false);
+          holdCompletedTimestampRef.current = Date.now();
+          holdDurationRef.current = HOLD_TIME_MS;
           if (ringEl) ringEl.classList.add("hidden");
           if (state.action === "pow") void startPowGame(state.index);
           else void openRoulette(state.index, state.key as "item_box" | "cube_yellow" | "cerezas");
@@ -497,10 +532,12 @@ export default function ShopEstrellasPage() {
   const handlePointerUp = useCallback(() => {
     const state = holdState.current;
     if (!state.timerActive) return;
+    holdDurationRef.current = performance.now() - state.startTime;
     state.timerActive = false;
     if (state.rafId) cancelAnimationFrame(state.rafId);
     state.rafId = null;
     state.action = null;
+    chargeAudioPlayingRef.current = false;
     playCharge(false);
     document.querySelectorAll(".ring").forEach((el) => el.classList.add("hidden"));
   }, [playCharge]);
@@ -610,16 +647,26 @@ export default function ShopEstrellasPage() {
                     data-index={i}
                     onClick={() => {
                       if (!canEdit || powGameRunning) return;
-                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "cerezas") {
+                      if (it.key !== "item_box" && it.key !== "cube_yellow") {
                         changeCount(i, it.key as keyof Alumno, 1);
                       }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (!canEdit || powGameRunning) return false;
-                      if (it.key !== "item_box" && it.key !== "cube_yellow" && it.key !== "pow" && it.key !== "cerezas") {
-                        changeCount(i, it.key as keyof Alumno, -1);
+                      if (it.key === "item_box" || it.key === "cube_yellow" || it.key === "pow") {
+                        return false;
                       }
+                      if (it.key === "cerezas") {
+                        const holdCompletedRecently =
+                          Date.now() - holdCompletedTimestampRef.current < 1500;
+                        const wasLongHold = holdDurationRef.current >= 250;
+                        if (!holdCompletedRecently && !wasLongHold) {
+                          changeCount(i, "cerezas", -1);
+                        }
+                        return false;
+                      }
+                      changeCount(i, it.key as keyof Alumno, -1);
                       return false;
                     }}
                     onPointerDown={(e) => handlePointerDown(e, i, it.key)}

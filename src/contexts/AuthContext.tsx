@@ -32,6 +32,8 @@ export type AuthContextValue = {
   isAdmin: boolean;
   /** Es un alumno logueado con rol 'user'. */
   isUserStudent: boolean;
+  /** Rol viewer */
+  isViewer: boolean;
   /** Cargando sesión / perfil inicial */
   loading: boolean;
   signIn: (identifier: string, password: string) => Promise<{ error: string | null }>;
@@ -181,6 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canEdit = role === "admin" || role === "collaborator";
   const isAdmin = role === "admin";
   const isUserStudent = role === "user";
+  const isViewer = role === "viewer";
 
   const signIn = useCallback(
     async (identifier: string, password: string) => {
@@ -310,6 +313,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canEdit,
       isAdmin,
       isUserStudent,
+      isViewer,
       loading,
       signIn,
       changePassword,
@@ -324,6 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canEdit,
       isAdmin,
       isUserStudent,
+      isViewer,
       loading,
       signIn,
       changePassword,

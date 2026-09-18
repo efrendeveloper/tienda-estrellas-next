@@ -48,16 +48,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // Seguridad de roles: si es 'user' (alumno), solo puede comprar para SU propio alumno_id
-    if (userRole === "user") {
-      if (userAlumnoId !== alumnoId) {
+    // Seguridad de roles: si es 'user' o 'viewer' (alumno vinculado), solo puede comprar para SU propio alumno_id
+    if (userRole === "user" || userRole === "viewer") {
+      if (!userAlumnoId || userAlumnoId !== alumnoId) {
         return NextResponse.json(
           { error: "No tienes permiso para comprar con las monedas de otro alumno." },
           { status: 403 }
         );
       }
     } else if (userRole !== "admin" && userRole !== "collaborator") {
-      // Visitante o viewer
+      // Visitante no autenticado
       return NextResponse.json(
         { error: "Debes iniciar sesión para comprar en la tienda." },
         { status: 403 }
