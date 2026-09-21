@@ -11,24 +11,24 @@ interface ClasePruebaData {
 export async function sendClasePruebaEmails(data: ClasePruebaData) {
   const { nombre, email, whatsapp, nivel, objetivos } = data;
 
-  const smtpUser = process.env.SMTP_USER || "efrendeveloper1@gmail.com";
+  const smtpUser = process.env.SMTP_USER || "";
   const smtpPass = process.env.SMTP_PASS;
-  const adminEmail = process.env.ADMIN_EMAIL || "efrendeveloper1@gmail.com";
-  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+  const adminEmail = process.env.ADMIN_EMAIL || smtpUser;
+  const smtpHost = process.env.SMTP_HOST || "";
   const smtpPort = Number(process.env.SMTP_PORT) || 465;
 
-  if (!smtpPass) {
+  if (!smtpPass || !smtpUser || !adminEmail || !smtpHost) {
     console.warn(
-      "⚠️ [Nodemailer] SMTP_PASS no está configurado en las variables de entorno (.env.local).\n" +
+      "⚠️ [Nodemailer] Variables SMTP incompletas en las variables de entorno.\n" +
       "Simulación de envío:\n" +
       `Para: ${email}\n` +
-      `Admin: ${adminEmail}\n` +
+      `Admin: ${adminEmail || "No configurado"}\n` +
       `Datos: ${JSON.stringify(data, null, 2)}`
     );
     return {
       success: true,
       simulated: true,
-      message: "Modo de simulación (SMTP_PASS no configurado)",
+      message: "Modo de simulación (variables SMTP no configuradas)",
     };
   }
 
@@ -100,7 +100,7 @@ export async function sendClasePruebaEmails(data: ClasePruebaData) {
     </html>
   `;
 
-  // 2. Correo para el Administrador (efrendeveloper1@gmail.com)
+  // 2. Correo para el Administrador
   const adminHtml = `
     <!DOCTYPE html>
     <html>

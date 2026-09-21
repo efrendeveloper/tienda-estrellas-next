@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const CAPTCHA_SECRET =
-  process.env.CAPTCHA_SECRET || "efrendrums-captcha-secret-key-2026";
+  process.env.CAPTCHA_SECRET || "local-dev-captcha-secret-key";
 const CHARACTERS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 export interface CaptchaData {
