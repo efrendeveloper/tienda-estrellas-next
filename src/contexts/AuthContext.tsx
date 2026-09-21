@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, getAuthStorageKey } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 
 type ProfileData = Pick<
@@ -68,7 +68,8 @@ function isInvalidRefreshTokenError(message: string | undefined): boolean {
   const text = message.toLowerCase();
   return (
     text.includes("invalid refresh token") ||
-    text.includes("refresh token not found")
+    text.includes("refresh token not found") ||
+    text.includes("refresh_token_not_found")
   );
 }
 
@@ -124,7 +125,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase.auth.getSession();
         if (error && isInvalidRefreshTokenError(error.message)) {
           // Token local huérfano/expirado: limpiamos sesión local sin ruido en consola.
-          await supabase.auth.signOut({ scope: "local" });
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {}
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem(getAuthStorageKey());
+              window.localStorage.removeItem("tienda-estrellas-auth");
+            }
+          } catch {}
         } else if (error && !isAbortLike(error)) {
           console.warn("getSession:", error.message);
         }
@@ -253,10 +262,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "message" in e &&
         isInvalidRefreshTokenError(String((e as { message?: string }).message))
       ) {
-        await supabase.auth.signOut({ scope: "local" });
-        return;
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {}
+      } else {
+        throw e;
       }
-      throw e;
+    } finally {
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(getAuthStorageKey());
+          window.localStorage.removeItem("tienda-estrellas-auth");
+        }
+      } catch {}
     }
   }, [supabase]);
 
