@@ -51,6 +51,17 @@ export function EdrumsHeroGame() {
   const [duration, setDuration] = useState(30);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
+  // Volume & Mixer State
+  const [drumsVolume, setDrumsVolume] = useState<number>(1.0);
+  const [trackVolume, setTrackVolume] = useState<number>(0.85);
+
+  // Custom Drum Samples State
+  const [samplesModalOpen, setSamplesModalOpen] = useState(false);
+  const [sampleInfoMap, setSampleInfoMap] = useState<
+    Record<DrumInstrumentId, { hasCustom: boolean; name?: string }>
+  >(() => drumSoundEngine.getAllSampleInfo());
+  const [loadingSampleLane, setLoadingSampleLane] = useState<DrumInstrumentId | null>(null);
+
   // Active Song Chart
   const [activeChart, setActiveChart] = useState<SongChart>(SAMPLE_PRESETS[0]);
   const [notes, setNotes] = useState<DrumNote[]>(SAMPLE_PRESETS[0].notes);
@@ -106,6 +117,79 @@ export function EdrumsHeroGame() {
 
   // Game Summary Modal
   const [showSummary, setShowSummary] = useState(false);
+
+  // Initialize Volumes & Stored Samples from IndexedDB on mount
+  useEffect(() => {
+    // 1. Restore Volumes from localStorage
+    const savedDrumsVol = localStorage.getItem("edrum_hero_drums_vol");
+    if (savedDrumsVol !== null) {
+      const parsed = parseFloat(savedDrumsVol);
+      if (!isNaN(parsed)) {
+        setDrumsVolume(parsed);
+        drumSoundEngine.setDrumsVolume(parsed);
+      }
+    }
+
+    const savedTrackVol = localStorage.getItem("edrum_hero_track_vol");
+    if (savedTrackVol !== null) {
+      const parsed = parseFloat(savedTrackVol);
+      if (!isNaN(parsed)) {
+        setTrackVolume(parsed);
+        if (audioRef.current) audioRef.current.volume = parsed;
+      }
+    } else if (audioRef.current) {
+      audioRef.current.volume = 0.85;
+    }
+
+    // 2. Load stored custom samples from IndexedDB
+    void (async () => {
+      await drumSoundEngine.initStoredSamples();
+      setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+    })();
+  }, []);
+
+  // Update audio element volume when trackVolume changes
+  const handleTrackVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1.0, newVol));
+    setTrackVolume(clamped);
+    if (audioRef.current) audioRef.current.volume = clamped;
+    localStorage.setItem("edrum_hero_track_vol", String(clamped));
+  };
+
+  const handleDrumsVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1.5, newVol));
+    setDrumsVolume(clamped);
+    drumSoundEngine.setDrumsVolume(clamped);
+    localStorage.setItem("edrum_hero_drums_vol", String(clamped));
+  };
+
+  const handleSampleUpload = async (laneId: DrumInstrumentId, file: File) => {
+    setLoadingSampleLane(laneId);
+    const res = await drumSoundEngine.loadSampleFromFile(laneId, file);
+    setLoadingSampleLane(null);
+
+    if (res.success) {
+      setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+      // Test hit feedback
+      drumSoundEngine.playSound(laneId, 110);
+    } else {
+      alert(res.error || "No se pudo cargar el archivo de sample");
+    }
+  };
+
+  const handleRemoveSample = async (laneId: DrumInstrumentId) => {
+    await drumSoundEngine.removeSample(laneId);
+    setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+  };
+
+  const handleResetAllSamples = async () => {
+    if (
+      confirm("¿Estás seguro de que deseas restablecer todos los sonidos al sintetizador por defecto?")
+    ) {
+      await drumSoundEngine.clearAllSamples();
+      setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+    }
+  };
 
   // Initialize Sample Audio or load user audio
   useEffect(() => {
@@ -498,6 +582,9 @@ export function EdrumsHeroGame() {
         }
       }
 
+      if (audioRef.current) {
+        audioRef.current.volume = trackVolume;
+      }
       void audioRef.current.play();
       setIsPlaying(true);
     }
@@ -667,12 +754,21 @@ export function EdrumsHeroGame() {
             🥁 Batería MIDI {midiSupported ? "🟢" : "⚪"}
           </button>
 
-          {/* Upload MP3 */}
+          {/* Sound & Custom Samples Manager Button */}
+          <button
+            type="button"
+            onClick={() => setSamplesModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-pink-500/40 bg-pink-950/40 text-pink-300 hover:bg-pink-900/60 text-xs font-semibold transition-all shadow-[0_0_12px_rgba(236,72,153,0.25)]"
+          >
+            🎛️ Sonidos & Samples
+          </button>
+
+          {/* Upload MP3 / Audio Track */}
           <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-semibold cursor-pointer shadow-md transition-all">
-            📁 Cargar MP3
+            📁 Cargar Pista
             <input
               type="file"
-              accept="audio/*"
+              accept=".wav,.mp3,.m4a,.m4v,audio/*"
               className="hidden"
               onChange={handleFileUpload}
             />
@@ -921,6 +1017,57 @@ export function EdrumsHeroGame() {
                 {rate}x
               </button>
             ))}
+          </div>
+
+          {/* Quick Dual Volume Mixer (Drum & Track) */}
+          <div className="flex flex-wrap items-center gap-2.5 bg-black/50 px-3 py-1.5 rounded-xl border border-white/10 text-xs">
+            {/* Drum hit volume */}
+            <div className="flex items-center gap-1.5" title="Volumen de tus golpes de batería / samples">
+              <span className="text-sm">🥁</span>
+              <span className="text-gray-300 font-semibold text-[11px] hidden sm:inline">Batería:</span>
+              <input
+                type="range"
+                min={0}
+                max={1.5}
+                step={0.05}
+                value={drumsVolume}
+                onChange={(e) => handleDrumsVolumeChange(parseFloat(e.target.value))}
+                className="w-16 sm:w-20 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+              />
+              <span className="font-mono text-cyan-300 text-[10px] w-8">
+                {Math.round(drumsVolume * 100)}%
+              </span>
+            </div>
+
+            <div className="w-[1px] h-4 bg-white/20 hidden sm:block" />
+
+            {/* Backing track volume */}
+            <div className="flex items-center gap-1.5" title="Volumen de la pista / canción">
+              <span className="text-sm">🎵</span>
+              <span className="text-gray-300 font-semibold text-[11px] hidden sm:inline">Pista:</span>
+              <input
+                type="range"
+                min={0}
+                max={1.0}
+                step={0.05}
+                value={trackVolume}
+                onChange={(e) => handleTrackVolumeChange(parseFloat(e.target.value))}
+                className="w-16 sm:w-20 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-pink-400"
+              />
+              <span className="font-mono text-pink-300 text-[10px] w-8">
+                {Math.round(trackVolume * 100)}%
+              </span>
+            </div>
+
+            {/* Open Samples Modal button */}
+            <button
+              type="button"
+              onClick={() => setSamplesModalOpen(true)}
+              className="ml-auto px-2.5 py-1 rounded-lg bg-pink-950/80 hover:bg-pink-900 border border-pink-500/40 text-pink-300 font-bold text-[11px] flex items-center gap-1 transition-all shadow-sm"
+              title="Abrir gestor de samples y mezclador"
+            >
+              🎛️ Samples
+            </button>
           </div>
         </div>
 
@@ -1246,6 +1393,235 @@ export function EdrumsHeroGame() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAMPLES & SOUND ENGINE MODAL */}
+      {samplesModalOpen && (
+        <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-2xl border border-cyan-500/40 bg-[#0f172a] p-5 shadow-2xl my-6">
+            <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-400 flex items-center gap-2">
+                  🎛️ Mezclador de Volumen y Samples de Batería
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Personaliza tus sonidos con archivos propios (.wav, .mp3, .m4v, .m4a) y calibra la mezcla entre tu ejecución y la pista.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSamplesModalOpen(false)}
+                className="text-gray-400 hover:text-white text-lg font-bold p-1 rounded-lg hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* MASTER VOLUME MIXER SECTION */}
+            <div className="mb-5 p-4 rounded-xl bg-slate-950/80 border border-cyan-500/30">
+              <h4 className="font-bold text-gray-200 text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span>🔊</span> Control de Volumen Maestro (Mezcla en Vivo)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Drums Volume */}
+                <div className="p-3 rounded-lg bg-black/50 border border-cyan-500/20 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
+                      🥁 Batería (Lo que tocas)
+                    </span>
+                    <span className="font-mono text-cyan-400 font-extrabold text-xs px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40">
+                      {Math.round(drumsVolume * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1.5}
+                    step={0.05}
+                    value={drumsVolume}
+                    onChange={(e) => handleDrumsVolumeChange(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-gray-400">
+                    <span>0% (Silencio)</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        drumSoundEngine.playSound("snare", 100);
+                        setTimeout(() => drumSoundEngine.playSound("kick", 100), 120);
+                      }}
+                      className="px-2 py-0.5 rounded bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 font-semibold"
+                    >
+                      🔊 Probar Golpe
+                    </button>
+                    <span>150% (Boost)</span>
+                  </div>
+                </div>
+
+                {/* Backing Track Volume */}
+                <div className="p-3 rounded-lg bg-black/50 border border-pink-500/20 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-pink-300 text-xs flex items-center gap-1.5">
+                      🎵 Pista de Acompañamiento
+                    </span>
+                    <span className="font-mono text-pink-400 font-extrabold text-xs px-2 py-0.5 rounded bg-pink-950/80 border border-pink-500/40">
+                      {Math.round(trackVolume * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1.0}
+                    step={0.05}
+                    value={trackVolume}
+                    onChange={(e) => handleTrackVolumeChange(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-pink-400"
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-gray-400">
+                    <span>0% (Mute)</span>
+                    <span className="text-gray-400 truncate max-w-[130px]">{audioName}</span>
+                    <span>100% (Max)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SAMPLE MANAGER SECTION */}
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <h4 className="font-bold text-gray-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🥁</span> Asignación de Samples por Pad
+                </h4>
+                <span className="text-[10px] text-gray-400">
+                  Soporta: <strong className="text-cyan-300">.wav, .mp3, .m4v, .m4a</strong>
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {DEFAULT_DRUM_LANES.map((lane) => {
+                  const sampleInfo = sampleInfoMap[lane.id];
+                  const hasCustom = sampleInfo?.hasCustom;
+                  const isLoading = loadingSampleLane === lane.id;
+
+                  return (
+                    <div
+                      key={lane.id}
+                      className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-cyan-500/30 transition-all"
+                    >
+                      {/* Pad Info */}
+                      <div className="flex items-center gap-2 min-w-[140px]">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                          style={{ backgroundColor: lane.color }}
+                        />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-gray-200 text-xs">{lane.name}</span>
+                            <span className="text-[10px] text-gray-400">[{lane.key.toUpperCase()}]</span>
+                          </div>
+                          <span className="text-[9px] text-gray-400 font-mono">
+                            MIDI: {midiMapping[lane.id]}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <div className="flex-1 min-w-[160px]">
+                        {isLoading ? (
+                          <div className="flex items-center gap-1.5 text-xs text-amber-300 animate-pulse">
+                            <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                            <span>Decodificando sample...</span>
+                          </div>
+                        ) : hasCustom ? (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[11px] text-emerald-300">
+                            <span>🟢</span>
+                            <span className="truncate max-w-[180px] font-mono font-medium">
+                              {sampleInfo?.name || "Sample cargado"}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-gray-900/80 border border-white/5 text-[11px] text-gray-400">
+                            <span>⚪</span>
+                            <span>Sintetizador integrado</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Test button */}
+                        <button
+                          type="button"
+                          title={`Escuchar sonido de ${lane.name}`}
+                          onClick={() => drumSoundEngine.playSound(lane.id, 110)}
+                          className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-[11px] font-semibold transition-all flex items-center gap-1"
+                        >
+                          🔊 Probar
+                        </button>
+
+                        {/* Upload button */}
+                        <label
+                          title="Cargar archivo .wav, .mp3, .m4v o .m4a"
+                          className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black text-[11px] font-bold cursor-pointer transition-all shadow-sm flex items-center gap-1"
+                        >
+                          📂 Cargar
+                          <input
+                            type="file"
+                            accept=".wav,.mp3,.m4v,.m4a,audio/*,video/mp4,video/x-m4v"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                void handleSampleUpload(lane.id, file);
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {/* Reset this pad to synth */}
+                        {hasCustom && (
+                          <button
+                            type="button"
+                            title="Volver al sintetizador integrado"
+                            onClick={() => void handleRemoveSample(lane.id)}
+                            className="px-2 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-500/30 text-[11px] font-semibold transition-all"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer info & global reset */}
+              <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <span>💾</span> Tus samples se guardan automáticamente en tu navegador.
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleResetAllSamples()}
+                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-red-950 hover:text-red-300 hover:border-red-500/40 border border-white/10 text-gray-300 font-semibold text-xs transition-all"
+                  >
+                    🔄 Restablecer todos a fábrica
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSamplesModalOpen(false)}
+                    className="px-4 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs shadow-md transition-all"
+                  >
+                    Listo
+                  </button>
                 </div>
               </div>
             </div>
