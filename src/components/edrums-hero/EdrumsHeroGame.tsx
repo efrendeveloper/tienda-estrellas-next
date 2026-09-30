@@ -13,8 +13,13 @@ import {
 } from "./types";
 import { DrumHighwayCanvas } from "./DrumHighwayCanvas";
 import { midiManager, MidiDevice, RawMidiEvent } from "./midiManager";
-import { drumSoundEngine } from "./drumSoundEngine";
+import { drumSoundEngine, CustomSampleInfo } from "./drumSoundEngine";
 import { SAMPLE_PRESETS, generateSampleSynthAudio } from "./sampleBeats";
+import {
+  getAvailableSamplesForLane,
+  DEFAULT_LANE_SAMPLES,
+  DrumSampleOption,
+} from "./drumSamplesCatalog";
 import { createSupabaseClient } from "@/lib/supabase";
 import type { Alumno } from "@/types";
 
@@ -58,7 +63,7 @@ export function EdrumsHeroGame() {
   // Custom Drum Samples State
   const [samplesModalOpen, setSamplesModalOpen] = useState(false);
   const [sampleInfoMap, setSampleInfoMap] = useState<
-    Record<DrumInstrumentId, { hasCustom: boolean; name?: string }>
+    Record<DrumInstrumentId, CustomSampleInfo>
   >(() => drumSoundEngine.getAllSampleInfo());
   const [loadingSampleLane, setLoadingSampleLane] = useState<DrumInstrumentId | null>(null);
 
@@ -177,14 +182,72 @@ export function EdrumsHeroGame() {
     }
   };
 
-  const handleRemoveSample = async (laneId: DrumInstrumentId) => {
-    await drumSoundEngine.removeSample(laneId);
-    setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+  const handleSelectCatalogSample = async (laneId: DrumInstrumentId, sample: DrumSampleOption) => {
+    setLoadingSampleLane(laneId);
+    const res = await drumSoundEngine.loadSampleFromUrl(laneId, sample.path, sample.id, true);
+    setLoadingSampleLane(null);
+
+    if (res.success) {
+      setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+      // Instant audio preview upon selection
+      drumSoundEngine.playSound(laneId, 110);
+    } else {
+      alert(res.error || "No se pudo cargar el sample seleccionado");
+    }
   };
 
-  const handleResetAllSamples = async () => {
+  const handleSelectSynth = async (laneId: DrumInstrumentId) => {
+    await drumSoundEngine.setLaneToSynth(laneId);
+    setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+    drumSoundEngine.playSound(laneId, 110);
+  };
+
+  const handleCycleSample = async (laneId: DrumInstrumentId, direction: "prev" | "next") => {
+    const options = getAvailableSamplesForLane(laneId);
+    if (options.length === 0) return;
+
+    const currentName = sampleInfoMap[laneId]?.name;
+    const currentIndex = options.findIndex((opt) => opt.id === currentName);
+
+    let nextIndex = 0;
+    if (currentIndex === -1) {
+      nextIndex = direction === "next" ? 0 : options.length - 1;
+    } else {
+      if (direction === "next") {
+        nextIndex = (currentIndex + 1) % options.length;
+      } else {
+        nextIndex = (currentIndex - 1 + options.length) % options.length;
+      }
+    }
+
+    const nextSample = options[nextIndex];
+    if (nextSample) {
+      await handleSelectCatalogSample(laneId, nextSample);
+    }
+  };
+
+  const handleResetPadToDefault = async (laneId: DrumInstrumentId) => {
+    setLoadingSampleLane(laneId);
+    await drumSoundEngine.resetLaneToDefault(laneId);
+    setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+    setLoadingSampleLane(null);
+    drumSoundEngine.playSound(laneId, 110);
+  };
+
+  const handleResetAllToDefaults = async () => {
+    setLoadingSampleLane("hihat");
+    await drumSoundEngine.resetToDefaults();
+    setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
+    setLoadingSampleLane(null);
+    // Play kit preview
+    drumSoundEngine.playSound("kick", 110);
+    setTimeout(() => drumSoundEngine.playSound("snare", 110), 130);
+    setTimeout(() => drumSoundEngine.playSound("hihat", 110), 260);
+  };
+
+  const handleResetAllToSynth = async () => {
     if (
-      confirm("¿Estás seguro de que deseas restablecer todos los sonidos al sintetizador por defecto?")
+      confirm("¿Estás seguro de que deseas restablecer todos los sonidos al sintetizador integrado?")
     ) {
       await drumSoundEngine.clearAllSamples();
       setSampleInfoMap(drumSoundEngine.getAllSampleInfo());
@@ -1493,86 +1556,202 @@ export function EdrumsHeroGame() {
 
             {/* SAMPLE MANAGER SECTION */}
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h4 className="font-bold text-gray-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🥁</span> Asignación de Samples por Pad
-                </h4>
-                <span className="text-[10px] text-gray-400">
-                  Soporta: <strong className="text-cyan-300">.wav, .mp3, .m4v, .m4a</strong>
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h4 className="font-bold text-gray-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🥁</span> Biblioteca de Sonidos & Samples por Pad
+                  </h4>
+                  <p className="text-[11px] text-gray-400">
+                    Navega entre las muestras de audio de la carpeta sounds, escucha un preview al seleccionar y calibra tu batería.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/80 border border-cyan-500/30 px-2 py-0.5 rounded">
+                    📁 Sonidos en /sound/
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
                 {DEFAULT_DRUM_LANES.map((lane) => {
                   const sampleInfo = sampleInfoMap[lane.id];
                   const hasCustom = sampleInfo?.hasCustom;
+                  const isDefault = sampleInfo?.isDefault;
+                  const isSynth = sampleInfo?.isSynth;
                   const isLoading = loadingSampleLane === lane.id;
+                  const catalogOptions = getAvailableSamplesForLane(lane.id);
+                  const defaultOpt = DEFAULT_LANE_SAMPLES[lane.id];
+                  const hasCatalog = catalogOptions.length > 0;
 
                   return (
                     <div
                       key={lane.id}
-                      className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-cyan-500/30 transition-all"
+                      className="p-3 rounded-xl bg-black/50 border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col gap-2.5"
                     >
-                      {/* Pad Info */}
-                      <div className="flex items-center gap-2 min-w-[140px]">
-                        <span
-                          className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
-                          style={{ backgroundColor: lane.color }}
-                        />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-gray-200 text-xs">{lane.name}</span>
-                            <span className="text-[10px] text-gray-400">[{lane.key.toUpperCase()}]</span>
+                      {/* Top Row: Pad Info, Status Badge, Test Hit */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        {/* Pad Tag */}
+                        <div className="flex items-center gap-2 min-w-[130px]">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-md ring-2 ring-white/10"
+                            style={{ backgroundColor: lane.color }}
+                          />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-gray-100 text-xs">{lane.name}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">[{lane.key.toUpperCase()}]</span>
+                              <span className="text-[9px] text-gray-500 font-mono">MIDI {midiMapping[lane.id]}</span>
+                            </div>
                           </div>
-                          <span className="text-[9px] text-gray-400 font-mono">
-                            MIDI: {midiMapping[lane.id]}
-                          </span>
                         </div>
-                      </div>
 
-                      {/* Status Badge */}
-                      <div className="flex-1 min-w-[160px]">
-                        {isLoading ? (
-                          <div className="flex items-center gap-1.5 text-xs text-amber-300 animate-pulse">
-                            <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                            <span>Decodificando sample...</span>
-                          </div>
-                        ) : hasCustom ? (
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[11px] text-emerald-300">
-                            <span>🟢</span>
-                            <span className="truncate max-w-[180px] font-mono font-medium">
-                              {sampleInfo?.name || "Sample cargado"}
+                        {/* Current Sample Status Badge */}
+                        <div className="flex-1 min-w-[140px] flex items-center">
+                          {isLoading ? (
+                            <span className="text-[11px] text-amber-300 animate-pulse flex items-center gap-1">
+                              <span className="w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                              Cargando...
                             </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-gray-900/80 border border-white/5 text-[11px] text-gray-400">
-                            <span>⚪</span>
-                            <span>Sintetizador integrado</span>
-                          </div>
-                        )}
-                      </div>
+                          ) : isDefault ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] text-cyan-300 font-mono font-bold">
+                              <span>⭐</span>
+                              <span className="truncate max-w-[160px]">{sampleInfo?.name}</span>
+                              <span className="text-[9px] text-cyan-400 bg-cyan-900/60 px-1 rounded">Default</span>
+                            </span>
+                          ) : hasCustom ? (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono font-medium">
+                              <span>🟢</span>
+                              <span className="truncate max-w-[180px]">{sampleInfo?.name || "Sample activo"}</span>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-900/80 border border-white/5 text-[10px] text-gray-400">
+                              <span>⚪</span>
+                              <span>Sintetizador integrado</span>
+                            </span>
+                          )}
+                        </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Test button */}
+                        {/* Test Hit Button */}
                         <button
                           type="button"
-                          title={`Escuchar sonido de ${lane.name}`}
+                          title={`Reproducir golpe de ${lane.name}`}
                           onClick={() => drumSoundEngine.playSound(lane.id, 110)}
-                          className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-[11px] font-semibold transition-all flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-cyan-300 hover:text-white text-[11px] font-bold border border-white/10 transition-all flex items-center gap-1 shadow-sm active:scale-95 shrink-0"
                         >
-                          🔊 Probar
+                          <span>🔊</span> Probar
                         </button>
+                      </div>
 
-                        {/* Upload button */}
+                      {/* Bottom Row: Sound Navigation / Catalog Selector / Upload */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/5">
+                        {hasCatalog ? (
+                          <>
+                            {/* Previous / Next buttons for rapid folder navigation */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                title="Sonido anterior en carpeta"
+                                onClick={() => void handleCycleSample(lane.id, "prev")}
+                                className="w-7 h-7 rounded-lg bg-gray-800 hover:bg-cyan-900/60 border border-white/10 hover:border-cyan-500/40 text-gray-200 text-xs font-bold transition-all flex items-center justify-center active:scale-95"
+                              >
+                                ◀
+                              </button>
+                              <button
+                                type="button"
+                                title="Sonido siguiente en carpeta"
+                                onClick={() => void handleCycleSample(lane.id, "next")}
+                                className="w-7 h-7 rounded-lg bg-gray-800 hover:bg-cyan-900/60 border border-white/10 hover:border-cyan-500/40 text-gray-200 text-xs font-bold transition-all flex items-center justify-center active:scale-95"
+                              >
+                                ▶
+                              </button>
+                            </div>
+
+                            {/* Dropdown Selector */}
+                            <div className="flex-1 min-w-[200px]">
+                              <select
+                                value={
+                                  isSynth
+                                    ? "__SYNTH__"
+                                    : catalogOptions.some((o) => o.id === sampleInfo?.name)
+                                    ? sampleInfo?.name
+                                    : "__CUSTOM__"
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "__SYNTH__") {
+                                    void handleSelectSynth(lane.id);
+                                  } else if (val === "__CUSTOM__") {
+                                    // Keep custom
+                                  } else {
+                                    const match = catalogOptions.find((o) => o.id === val);
+                                    if (match) void handleSelectCatalogSample(lane.id, match);
+                                  }
+                                }}
+                                className="w-full bg-slate-900 text-gray-200 text-[11px] font-mono rounded-lg px-2.5 py-1.5 border border-cyan-500/30 focus:border-cyan-400 focus:outline-none cursor-pointer"
+                              >
+                                {catalogOptions.map((opt) => {
+                                  const isOptDefault = defaultOpt?.id === opt.id;
+                                  return (
+                                    <option key={opt.id} value={opt.id} className="bg-slate-900 text-gray-200 py-1">
+                                      {isOptDefault ? `⭐ ${opt.id} (Por Defecto)` : `🎵 ${opt.id}`}
+                                    </option>
+                                  );
+                                })}
+                                <option value="__SYNTH__" className="bg-slate-900 text-amber-300 py-1">
+                                  ⚪ Sintetizador Integrado (Procedural)
+                                </option>
+                                {sampleInfo?.name && !catalogOptions.some((o) => o.id === sampleInfo.name) && (
+                                  <option value="__CUSTOM__" className="bg-slate-900 text-emerald-300 py-1">
+                                    📁 Archivo Propio: {sampleInfo.name}
+                                  </option>
+                                )}
+                              </select>
+                            </div>
+
+                            {/* Preview current selected option */}
+                            <button
+                              type="button"
+                              title="Reproducir preview de muestra"
+                              onClick={() => {
+                                const currentOpt = catalogOptions.find((o) => o.id === sampleInfo?.name);
+                                if (currentOpt) {
+                                  void drumSoundEngine.playPreviewUrl(currentOpt.path);
+                                } else {
+                                  drumSoundEngine.playSound(lane.id, 110);
+                                }
+                              }}
+                              className="px-2 py-1 rounded-lg bg-cyan-950/70 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/30 text-[10px] font-semibold transition-all flex items-center gap-1 active:scale-95 shrink-0"
+                            >
+                              <span>🎧</span> Preview
+                            </button>
+                          </>
+                        ) : (
+                          <div className="flex-1 text-[11px] text-gray-400 italic">
+                            Sintetizador procedural de platillo integrado
+                          </div>
+                        )}
+
+                        {/* Reset to default pad sound if not default */}
+                        {defaultOpt && !isDefault && (
+                          <button
+                            type="button"
+                            title={`Restablecer al sonido por defecto (${defaultOpt.id})`}
+                            onClick={() => void handleResetPadToDefault(lane.id)}
+                            className="px-2 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-500/30 text-[10px] font-semibold transition-all flex items-center gap-1 shrink-0"
+                          >
+                            ⭐ Default
+                          </button>
+                        )}
+
+                        {/* Upload custom file */}
                         <label
-                          title="Cargar archivo .wav, .mp3, .m4v o .m4a"
-                          className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black text-[11px] font-bold cursor-pointer transition-all shadow-sm flex items-center gap-1"
+                          title="Cargar archivo propio (.wav, .mp3, .m4a)"
+                          className="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-white/10 text-[10px] font-semibold cursor-pointer transition-all flex items-center gap-1 shrink-0"
                         >
-                          📂 Cargar
+                          <span>📂</span> Subir
                           <input
                             type="file"
-                            accept=".wav,.mp3,.m4v,.m4a,audio/*,video/mp4,video/x-m4v"
+                            accept=".wav,.mp3,.m4v,.m4a,audio/*"
                             className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
@@ -1584,13 +1763,13 @@ export function EdrumsHeroGame() {
                           />
                         </label>
 
-                        {/* Reset this pad to synth */}
+                        {/* Remove custom / revert to synth */}
                         {hasCustom && (
                           <button
                             type="button"
-                            title="Volver al sintetizador integrado"
-                            onClick={() => void handleRemoveSample(lane.id)}
-                            className="px-2 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-500/30 text-[11px] font-semibold transition-all"
+                            title="Cambiar a sintetizador integrado"
+                            onClick={() => void handleSelectSynth(lane.id)}
+                            className="px-1.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-500/30 text-[10px] transition-all shrink-0"
                           >
                             🗑️
                           </button>
@@ -1603,22 +1782,30 @@ export function EdrumsHeroGame() {
 
               {/* Footer info & global reset */}
               <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
-                <p className="text-[11px] text-gray-400 flex items-center gap-1">
-                  <span>💾</span> Tus samples se guardan automáticamente en tu navegador.
+                <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                  <span>💾</span>
+                  <span>Tus elecciones se guardan automáticamente para tus sesiones de juego y práctica.</span>
                 </p>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void handleResetAllSamples()}
-                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-red-950 hover:text-red-300 hover:border-red-500/40 border border-white/10 text-gray-300 font-semibold text-xs transition-all"
+                    onClick={() => void handleResetAllToSynth()}
+                    className="px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-gray-200 border border-white/10 font-semibold text-xs transition-all"
                   >
-                    🔄 Restablecer todos a fábrica
+                    ⚪ Todo a Sintetizador
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleResetAllToDefaults()}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-950 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/40 font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>⭐</span> Restablecer Kit por Defecto
                   </button>
                   <button
                     type="button"
                     onClick={() => setSamplesModalOpen(false)}
-                    className="px-4 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs shadow-md transition-all"
+                    className="px-5 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs shadow-md transition-all active:scale-95"
                   >
                     Listo
                   </button>

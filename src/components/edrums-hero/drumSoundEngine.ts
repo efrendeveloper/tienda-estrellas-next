@@ -5,10 +5,13 @@ import {
   deleteSampleFromStorage,
   clearAllSamplesFromStorage,
 } from "./sampleStorage";
+import { DEFAULT_LANE_SAMPLES } from "./drumSamplesCatalog";
 
 export interface CustomSampleInfo {
   hasCustom: boolean;
   name?: string;
+  isDefault?: boolean;
+  isSynth?: boolean;
 }
 
 class DrumSoundEngine {
@@ -21,6 +24,8 @@ class DrumSoundEngine {
   private sampleBuffers: Partial<Record<DrumInstrumentId, AudioBuffer>> = {};
   private sampleNames: Partial<Record<DrumInstrumentId, string>> = {};
   private isStorageInitialized: boolean = false;
+  // In-memory cache for loaded URL samples to allow instant previews & switches
+  private urlBufferCache: Map<string, AudioBuffer> = new Map();
 
   private getContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -53,25 +58,52 @@ class DrumSoundEngine {
     return this.noiseBuffer;
   }
 
-  // Initialize stored samples from IndexedDB (call on app mount)
+  // Initialize stored samples from IndexedDB and load defaults for unconfigured pads
   public async initStoredSamples(): Promise<void> {
     if (this.isStorageInitialized || typeof window === "undefined") return;
     this.isStorageInitialized = true;
 
+    const ctx = this.getContext();
+    if (!ctx) return;
+
     try {
       const stored = await loadAllSamplesFromStorage();
-      if (!stored || stored.length === 0) return;
+      if (stored && stored.length > 0) {
+        for (const item of stored) {
+          if (item.fileName === "__SYNTH__") {
+            this.sampleNames[item.laneId] = "__SYNTH__";
+            continue;
+          }
+          try {
+            const audioBuffer = await ctx.decodeAudioData(item.buffer.slice(0));
+            this.sampleBuffers[item.laneId] = audioBuffer;
+            this.sampleNames[item.laneId] = item.fileName;
+          } catch (err) {
+            console.warn(`No se pudo decodificar sample guardado para ${item.laneId}:`, err);
+          }
+        }
+      }
 
-      const ctx = this.getContext();
-      if (!ctx) return;
-
-      for (const item of stored) {
-        try {
-          const audioBuffer = await ctx.decodeAudioData(item.buffer.slice(0));
-          this.sampleBuffers[item.laneId] = audioBuffer;
-          this.sampleNames[item.laneId] = item.fileName;
-        } catch (err) {
-          console.warn(`No se pudo decodificar sample guardado para ${item.laneId}:`, err);
+      // Check defaults for lanes that don't have a custom sample and aren't explicitly synth
+      const defaultEntries = Object.entries(DEFAULT_LANE_SAMPLES) as [DrumInstrumentId, any][];
+      for (const [laneId, defaultOpt] of defaultEntries) {
+        if (!defaultOpt) continue;
+        if (!this.sampleBuffers[laneId] && this.sampleNames[laneId] !== "__SYNTH__") {
+          try {
+            const res = await fetch(defaultOpt.path);
+            if (res.ok) {
+              const arrayBuffer = await res.arrayBuffer();
+              const storageCopy = arrayBuffer.slice(0);
+              const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+              this.sampleBuffers[laneId] = audioBuffer;
+              this.sampleNames[laneId] = defaultOpt.id;
+              this.urlBufferCache.set(defaultOpt.path, audioBuffer);
+              // Save to IndexedDB so it's persisted for fast offline reuse
+              await saveSampleToStorage(laneId, defaultOpt.id, storageCopy);
+            }
+          } catch (err) {
+            console.warn(`Error precargando sample por defecto para ${laneId}:`, err);
+          }
         }
       }
     } catch (err) {
@@ -125,6 +157,109 @@ class DrumSoundEngine {
     }
   }
 
+  // Load sample from a URL path (e.g. from the sound library catalog)
+  public async loadSampleFromUrl(
+    laneId: DrumInstrumentId,
+    url: string,
+    fileName: string,
+    saveToStorage: boolean = true
+  ): Promise<{ success: boolean; error?: string }> {
+    const ctx = this.getContext();
+    if (!ctx) return { success: false, error: "AudioContext no disponible" };
+
+    try {
+      let buffer = this.urlBufferCache.get(url);
+      let storageCopy: ArrayBuffer | null = null;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      storageCopy = arrayBuffer.slice(0);
+      buffer = await ctx.decodeAudioData(arrayBuffer);
+      this.urlBufferCache.set(url, buffer);
+
+      this.sampleBuffers[laneId] = buffer;
+      this.sampleNames[laneId] = fileName;
+
+      if (saveToStorage && storageCopy) {
+        await saveSampleToStorage(laneId, fileName, storageCopy);
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error(`Error cargando sample desde ${url} para ${laneId}:`, err);
+      return { success: false, error: err?.message || "Error al cargar sonido" };
+    }
+  }
+
+  // Play a quick preview of any sample URL immediately
+  public async playPreviewUrl(url: string, velocity: number = 105): Promise<void> {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      let buffer = this.urlBufferCache.get(url);
+      if (!buffer) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const arrayBuffer = await res.arrayBuffer();
+        buffer = await ctx.decodeAudioData(arrayBuffer);
+        this.urlBufferCache.set(url, buffer);
+      }
+      const now = ctx.currentTime;
+      const velGain = Math.max(0.2, Math.min(1.0, velocity / 115));
+      this.playCustomSample(ctx, buffer, now, velGain);
+    } catch (err) {
+      console.warn("Error reproduciendo preview:", err);
+    }
+  }
+
+  // Explicitly set a lane to procedural synth
+  public async setLaneToSynth(laneId: DrumInstrumentId): Promise<void> {
+    delete this.sampleBuffers[laneId];
+    this.sampleNames[laneId] = "__SYNTH__";
+    const dummy = new ArrayBuffer(0);
+    await saveSampleToStorage(laneId, "__SYNTH__", dummy);
+  }
+
+  // Reset a specific lane to its default catalog sample
+  public async resetLaneToDefault(laneId: DrumInstrumentId): Promise<void> {
+    const defaultOpt = DEFAULT_LANE_SAMPLES[laneId];
+    if (defaultOpt) {
+      await this.loadSampleFromUrl(laneId, defaultOpt.path, defaultOpt.id, true);
+    } else {
+      await this.removeSample(laneId);
+    }
+  }
+
+  // Reset entire drum kit to default sounds
+  public async resetToDefaults(): Promise<void> {
+    const ctx = this.getContext();
+    await clearAllSamplesFromStorage();
+    this.sampleBuffers = {};
+    this.sampleNames = {};
+
+    if (!ctx) return;
+
+    const defaultEntries = Object.entries(DEFAULT_LANE_SAMPLES) as [DrumInstrumentId, any][];
+    for (const [laneId, defaultOpt] of defaultEntries) {
+      if (!defaultOpt) continue;
+      try {
+        const res = await fetch(defaultOpt.path);
+        if (res.ok) {
+          const arrayBuffer = await res.arrayBuffer();
+          const storageCopy = arrayBuffer.slice(0);
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+          this.sampleBuffers[laneId] = audioBuffer;
+          this.sampleNames[laneId] = defaultOpt.id;
+          this.urlBufferCache.set(defaultOpt.path, audioBuffer);
+          await saveSampleToStorage(laneId, defaultOpt.id, storageCopy);
+        }
+      } catch (err) {
+        console.warn(`Error restableciendo sample por defecto para ${laneId}:`, err);
+      }
+    }
+  }
+
   // Remove custom sample from a pad and revert to procedural synth
   public async removeSample(laneId: DrumInstrumentId): Promise<void> {
     delete this.sampleBuffers[laneId];
@@ -142,9 +277,15 @@ class DrumSoundEngine {
   // Sample info queries
   public getSampleInfo(laneId: DrumInstrumentId): CustomSampleInfo {
     const hasCustom = !!this.sampleBuffers[laneId];
+    const name = this.sampleNames[laneId];
+    const defaultOpt = DEFAULT_LANE_SAMPLES[laneId];
+    const isDefault = !!(defaultOpt && name === defaultOpt.id);
+    const isSynth = name === "__SYNTH__" || (!hasCustom && !name);
     return {
       hasCustom,
-      name: this.sampleNames[laneId],
+      name: isSynth ? undefined : name,
+      isDefault,
+      isSynth,
     };
   }
 
